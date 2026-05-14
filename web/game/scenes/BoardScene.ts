@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import {
-  applyReveal,
+  applyMistake,
+  applyRevealWithFeedback,
   chord as engineChord,
   countFlags,
   deducibleSafe,
@@ -20,6 +21,7 @@ import {
   type RoundConfig,
   type RoundEndReason,
   type RoundResult,
+  type RevealScoreFeedback,
   type ScoreBreakdown,
   type ScoreState,
 } from "@/lib/engine";
@@ -56,6 +58,8 @@ export default class BoardScene extends Phaser.Scene {
   private opens = 0;
   private clicks = 0;
   private chains = 0;
+  private lives: number = SCORE_CONSTANTS.MAX_LIVES;
+  private stunnedUntilMs: number | null = null;
   // Cross-game win streak. Casual mode only; match mode resets per match.
   private streak = 0;
   private streakBest = 0;
@@ -163,6 +167,8 @@ export default class BoardScene extends Phaser.Scene {
     this.opens = 0;
     this.clicks = 0;
     this.chains = 0;
+    this.lives = SCORE_CONSTANTS.MAX_LIVES;
+    this.stunnedUntilMs = null;
     this.actions = [];
     this.scoreState = newScoreState();
     this.leftDown = false;
@@ -430,7 +436,7 @@ export default class BoardScene extends Phaser.Scene {
       }
     }
     this.hoverCell = cell;
-    if (cell && !this.gameOver) {
+    if (cell && !this.gameOver && !this.isStunned()) {
       const t = this.tiles[cell.r][cell.c];
       if (t && !t.isRevealed && !t.isFlagged) {
         this.drawCover(t.cover, this.size, true);
@@ -439,7 +445,7 @@ export default class BoardScene extends Phaser.Scene {
   };
 
   private handlePointerDown = (p: Phaser.Input.Pointer) => {
-    if (this.gameOver || this.spectator) return;
+    if (this.gameOver || this.spectator || this.isStunned()) return;
     if (p.leftButtonDown()) this.leftDown = true;
     if (p.rightButtonDown()) this.rightDown = true;
     if (this.leftDown && this.rightDown && !this.chordConsumed) {
@@ -454,7 +460,7 @@ export default class BoardScene extends Phaser.Scene {
   private handlePointerUp = (p: Phaser.Input.Pointer) => {
     const wasLeft = p.leftButtonReleased();
     const wasRight = p.rightButtonReleased();
-    if (!this.gameOver && !this.spectator && !this.chordConsumed) {
+    if (!this.gameOver && !this.spectator && !this.isStunned() && !this.chordConsumed) {
       const cell = this.cellFromPointer(p);
       if (cell) {
         if (wasLeft && !this.rightDown) this.tryReveal(cell.r, cell.c);
@@ -471,12 +477,21 @@ export default class BoardScene extends Phaser.Scene {
     return this.startedAt === null ? 0 : Date.now() - this.startedAt;
   }
 
+  private stunRemainingMs(): number {
+    if (this.stunnedUntilMs === null) return 0;
+    return Math.max(0, this.stunnedUntilMs - this.nowMs());
+  }
+
+  private isStunned(): boolean {
+    return this.stunRemainingMs() > 0;
+  }
+
   private logAction(kind: ActionLogEntry["kind"], r: number, c: number) {
     this.actions.push({ kind, r, c, atMs: this.nowMs() });
   }
 
   private tryReveal(r: number, c: number) {
-    if (this.gameOver || this.spectator) return;
+    if (this.gameOver || this.spectator || this.isStunned()) return;
     const cell = this.board[r][c];
     if (cell.flagged || cell.revealed) return;
 
@@ -491,22 +506,22 @@ export default class BoardScene extends Phaser.Scene {
 
     const res = engineReveal(this.board, r, c);
     this.clicks += 1;
-    this.opens += res.revealed.length;
-    if (res.revealed.length > 4) this.chains += 1;
 
     if (res.hitMine) {
-      revealAllMines(this.board);
-      const hints = deducibleSafe(this.board);
-      this.renderAll(hints, { r, c });
-      this.cameras.main.shake(650, 0.012);
-      bridge.emit("sound:boom");
-      this.emitCellEvents([{ kind: "boom", r, c }]);
-      this.endRound("exploded", { r, c }, hints.length);
+      this.handleMistake(res.revealed, { r, c }, atMs);
       return;
     }
 
+    this.opens += res.revealed.length;
+    if (res.revealed.length > 4) this.chains += 1;
+
     // Score the reveal. Flag actions deliberately do not feed the scorer.
-    this.scoreState = applyReveal(this.scoreState, res.revealed.length, atMs);
+    const scored = applyRevealWithFeedback(
+      this.scoreState,
+      res.revealed.length,
+      atMs,
+    );
+    this.scoreState = scored.state;
 
     this.emitCellEvents(this.toRevealEvents(res.revealed));
 
@@ -515,7 +530,8 @@ export default class BoardScene extends Phaser.Scene {
       const stagger = rev.dist * 18;
       this.time.delayedCall(stagger, () => this.applyRevealVisual(rev.r, rev.c));
     }
-    bridge.emit("sound:reveal", { count: res.revealed.length });
+    bridge.emit("sound:reveal", this.soundPayload(scored.feedback));
+    this.applyComboJuice(scored.feedback, res.revealed);
 
     // particles for first 8 cells
     for (const rev of res.revealed.slice(0, 8)) {
@@ -524,6 +540,7 @@ export default class BoardScene extends Phaser.Scene {
     }
 
     if (isWin(this.board)) {
+      this.stunnedUntilMs = null;
       bridge.emit("sound:win");
       this.endRound("won");
       return;
@@ -533,7 +550,7 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   private tryFlag(r: number, c: number) {
-    if (this.gameOver || this.spectator) return;
+    if (this.gameOver || this.spectator || this.isStunned()) return;
     const cell = this.board[r][c];
     if (cell.revealed) return;
     const now = engineFlag(this.board, r, c);
@@ -563,31 +580,31 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   private tryChord(r: number, c: number) {
-    if (this.gameOver || this.spectator) return;
+    if (this.gameOver || this.spectator || this.isStunned()) return;
     const cell = this.board[r][c];
     if (!cell.revealed || cell.adj === 0) return;
     const res = engineChord(this.board, r, c);
     if (res.revealed.length === 0) return;
     const atMs = this.nowMs();
     this.logAction("chord", r, c);
-    this.opens += res.revealed.length;
-    if (res.revealed.length > 4) this.chains += 1;
+    const safeRevealed = res.revealed.filter((x) => !this.board[x.r][x.c].mine);
+    this.opens += safeRevealed.length;
+    if (safeRevealed.length > 4) this.chains += 1;
 
     if (res.hitMine) {
-      revealAllMines(this.board);
-      const hints = deducibleSafe(this.board);
       const boom = res.revealed.find((x) => this.board[x.r][x.c].mine);
-      this.renderAll(hints, boom ?? null);
-      this.cameras.main.shake(650, 0.012);
-      bridge.emit("sound:boom");
-      if (boom) this.emitCellEvents([{ kind: "boom", r: boom.r, c: boom.c }]);
-      this.endRound("exploded", boom ?? undefined, hints.length);
+      this.handleMistake(res.revealed, boom ?? null, atMs);
       return;
     }
 
     // Score the reveal cascade. Chords explicitly opt into the multiplier
     // chain — they're a single committed click just like a normal reveal.
-    this.scoreState = applyReveal(this.scoreState, res.revealed.length, atMs);
+    const scored = applyRevealWithFeedback(
+      this.scoreState,
+      safeRevealed.length,
+      atMs,
+    );
+    this.scoreState = scored.state;
 
     this.emitCellEvents(this.toRevealEvents(res.revealed));
 
@@ -596,12 +613,59 @@ export default class BoardScene extends Phaser.Scene {
       this.time.delayedCall(stagger, () => this.applyRevealVisual(rev.r, rev.c));
     }
     bridge.emit("sound:chord");
+    bridge.emit("sound:reveal", this.soundPayload(scored.feedback));
+    this.applyComboJuice(scored.feedback, res.revealed);
 
     if (isWin(this.board)) {
       bridge.emit("sound:win");
       this.endRound("won");
       return;
     }
+    this.emitStats();
+  }
+
+  private handleMistake(
+    revealed: { r: number; c: number; dist: number }[],
+    boom: { r: number; c: number } | null,
+    atMs: number,
+  ) {
+    this.scoreState = applyMistake(this.scoreState, atMs).state;
+    this.lives = Math.max(0, this.lives - 1);
+    this.leftDown = false;
+    this.rightDown = false;
+    this.chordConsumed = false;
+
+    const events: CellEvent[] = [...this.toRevealEvents(revealed)];
+    if (boom) events.push({ kind: "boom", r: boom.r, c: boom.c });
+    this.emitCellEvents(events);
+
+    if (this.lives <= 0) {
+      revealAllMines(this.board);
+      const hints = deducibleSafe(this.board);
+      this.renderAll(hints, boom);
+      this.cameras.main.shake(650, 0.012);
+      bridge.emit("sound:boom");
+      this.endRound("exploded", boom ?? undefined, hints.length);
+      return;
+    }
+
+    this.stunnedUntilMs = atMs + SCORE_CONSTANTS.MISTAKE_STUN_MS;
+    for (const rev of revealed) {
+      const stagger = rev.dist * 18;
+      this.time.delayedCall(stagger, () => this.applyRevealVisual(rev.r, rev.c));
+    }
+    this.applyMistakeJuice(boom, this.lives);
+    bridge.emit("sound:mistake", {
+      lives: this.lives,
+      stunMs: SCORE_CONSTANTS.MISTAKE_STUN_MS,
+    });
+
+    if (isWin(this.board)) {
+      bridge.emit("sound:win");
+      this.endRound("won");
+      return;
+    }
+
     this.emitStats();
   }
 
@@ -659,6 +723,158 @@ export default class BoardScene extends Phaser.Scene {
         alpha: 0,
         scale: 0,
         duration: 700,
+        ease: "Cubic.Out",
+        onComplete: () => p.destroy(),
+      });
+    }
+  }
+
+  private soundPayload(feedback: RevealScoreFeedback) {
+    return {
+      count: feedback.revealedCount,
+      streak: feedback.streak,
+      accuracyStreak: feedback.accuracyStreak,
+      multiplier: feedback.multiplier,
+      speedMultiplier: feedback.speedMultiplier,
+      accuracyMultiplier: feedback.accuracyMultiplier,
+      tier: feedback.tier,
+      hesitated: feedback.hesitated && feedback.previousStreak >= 3,
+      milestone: feedback.speedMilestoneBonus > 0,
+    };
+  }
+
+  private applyComboJuice(
+    feedback: RevealScoreFeedback,
+    revealed: { r: number; c: number; dist: number }[],
+  ) {
+    if (feedback.tier <= 0 || revealed.length === 0) return;
+
+    const anchor = revealed[Math.min(revealed.length - 1, Math.floor(revealed.length / 2))];
+    const shakeDuration = 70 + feedback.tier * 42;
+    const shakeIntensity = 0.0015 + feedback.tier * 0.0012;
+    this.cameras.main.shake(shakeDuration, shakeIntensity);
+    this.spawnComboText(anchor.r, anchor.c, feedback);
+    this.spawnComboBurst(anchor.r, anchor.c, feedback.tier);
+
+    if (feedback.tier >= 3) {
+      this.time.delayedCall(70, () => {
+        this.spawnComboBurst(anchor.r, anchor.c, feedback.tier);
+      });
+    }
+  }
+
+  private spawnComboText(r: number, c: number, feedback: RevealScoreFeedback) {
+    const t = this.tiles[r][c];
+    if (!t) return;
+
+    const hot = feedback.tier >= 3;
+    const x = t.container.x + this.size / 2;
+    const y = t.container.y - this.size * 0.35;
+    const label =
+      feedback.speedMilestoneBonus > 0
+        ? `x${feedback.multiplier.toFixed(2)} HOT`
+        : `x${feedback.multiplier.toFixed(2)}`;
+    const text = this.add
+      .text(x, y, label, {
+        fontFamily: "Georgia, serif",
+        fontSize: `${18 + feedback.tier * 5}px`,
+        fontStyle: "bold italic",
+        color: hot ? "#ff6a6a" : "#ffd472",
+        stroke: "#050607",
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setDepth(80)
+      .setBlendMode(Phaser.BlendModes.ADD);
+
+    text.setScale(0.7);
+    this.tweens.add({
+      targets: text,
+      y: y - 26 - feedback.tier * 5,
+      scale: 1.15,
+      alpha: { from: 1, to: 0 },
+      duration: 680 + feedback.tier * 90,
+      ease: "Cubic.Out",
+      onComplete: () => text.destroy(),
+    });
+  }
+
+  private spawnComboBurst(r: number, c: number, tier: RevealScoreFeedback["tier"]) {
+    const t = this.tiles[r][c];
+    if (!t) return;
+
+    const cx = t.container.x + this.size / 2;
+    const cy = t.container.y + this.size / 2;
+    const colors = tier >= 3 ? [0xff6a6a, 0xffaa42, 0xffd472] : [0xe3b248, 0x5fdada, 0x4caf6a];
+    const count = 8 + tier * 5;
+
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.35;
+      const dist = 20 + tier * 12 + Math.random() * 34;
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist;
+      const size = 2 + Math.random() * (3 + tier);
+      const p = this.add.circle(cx, cy, size, colors[i % colors.length], 1);
+      p.setDepth(70);
+      p.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: p,
+        x: cx + dx,
+        y: cy + dy,
+        alpha: 0,
+        scale: 0,
+        duration: 520 + tier * 110,
+        ease: "Cubic.Out",
+        onComplete: () => p.destroy(),
+      });
+    }
+  }
+
+  private applyMistakeJuice(boom: { r: number; c: number } | null, lives: number) {
+    if (!boom) return;
+    const t = this.tiles[boom.r]?.[boom.c];
+    if (!t) return;
+
+    const x = t.container.x + this.size / 2;
+    const y = t.container.y - this.size * 0.35;
+    this.cameras.main.shake(260, 0.0065);
+
+    const text = this.add
+      .text(x, y, lives > 0 ? `-1 HP  ${lives} LEFT` : "BUST", {
+        fontFamily: "Georgia, serif",
+        fontSize: "24px",
+        fontStyle: "bold italic",
+        color: "#ff6a6a",
+        stroke: "#050607",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setDepth(90)
+      .setBlendMode(Phaser.BlendModes.ADD);
+
+    this.tweens.add({
+      targets: text,
+      y: y - 34,
+      scale: 1.12,
+      alpha: { from: 1, to: 0 },
+      duration: 950,
+      ease: "Cubic.Out",
+      onComplete: () => text.destroy(),
+    });
+
+    for (let i = 0; i < 18; i++) {
+      const angle = (Math.PI * 2 * i) / 18 + Math.random() * 0.25;
+      const dist = 24 + Math.random() * 42;
+      const p = this.add.circle(x, y + this.size * 0.35, 3 + Math.random() * 3, 0xff4d4d, 1);
+      p.setDepth(75);
+      p.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: p,
+        x: x + Math.cos(angle) * dist,
+        y: y + this.size * 0.35 + Math.sin(angle) * dist,
+        alpha: 0,
+        scale: 0,
+        duration: 620,
         ease: "Cubic.Out",
         onComplete: () => p.destroy(),
       });
@@ -822,8 +1038,8 @@ export default class BoardScene extends Phaser.Scene {
       : this.currentScore("exploded", elapsedMs);
 
     // Hesitation preview: if the player has been idle long enough that a
-    // reveal right now would reset their multiplier, show that loss in the
-    // HUD immediately instead of waiting for the next click.
+    // reveal right now would reset speed, show that loss in the HUD
+    // immediately. Accuracy persists until an actual mistake.
     const sinceLastReveal =
       this.scoreState.lastRevealAt < 0
         ? 0
@@ -833,7 +1049,10 @@ export default class BoardScene extends Phaser.Scene {
       this.scoreState.lastRevealAt >= 0 &&
       sinceLastReveal >= SCORE_CONSTANTS.HESITATION_MS;
     const liveStreak = hesitating ? 0 : this.scoreState.streak;
-    const liveMultiplier = hesitating ? 1.0 : this.scoreState.multiplier;
+    const liveSpeedMultiplier = hesitating ? 1.0 : this.scoreState.speedMultiplier;
+    const liveAccuracyMultiplier = this.scoreState.accuracyMultiplier;
+    const liveMultiplier = liveSpeedMultiplier * liveAccuracyMultiplier;
+    const stunRemainingMs = this.stunRemainingMs();
 
     const stats: GameStats = {
       elapsedMs,
@@ -849,6 +1068,12 @@ export default class BoardScene extends Phaser.Scene {
       score: liveScore,
       liveStreak,
       liveMultiplier,
+      liveSpeedMultiplier,
+      liveAccuracyMultiplier,
+      accuracyStreak: this.scoreState.accuracyStreak,
+      lives: this.lives,
+      maxLives: SCORE_CONSTANTS.MAX_LIVES,
+      stunRemainingMs,
       timeLeftMs,
       cellsRevealed: this.countSafeRevealed(),
     };

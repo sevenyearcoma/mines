@@ -6,6 +6,7 @@ import { useGameStats } from "@/components/hud/useGameStats";
 import { MatchHUD } from "@/components/hud/MatchHUD";
 import { MatchResultOverlay } from "@/components/hud/MatchResultOverlay";
 import { MiniBoard } from "@/components/hud/MiniBoard";
+import { capture } from "@/lib/analytics/posthog";
 import { useMultiplayerMatch } from "@/lib/multiplayer/useMultiplayerMatch";
 
 const PhaserGame = dynamic(() => import("@/game/PhaserGame"), {
@@ -63,9 +64,22 @@ export default function MatchPage() {
         }}
       >
         {status === "idle" && (
-          <LobbyIdle onFindMatch={findMatch} error={errorMessage} />
+          <LobbyIdle
+            onFindMatch={() => {
+              capture("match_search_started");
+              findMatch();
+            }}
+            error={errorMessage}
+          />
         )}
-        {status === "searching" && <LobbySearching onCancel={cancelSearch} />}
+        {status === "searching" && (
+          <LobbySearching
+            onCancel={() => {
+              capture("match_search_cancelled");
+              cancelSearch();
+            }}
+          />
+        )}
         {(status === "in_match" || status === "complete") &&
           snapshot &&
           currentRound && (

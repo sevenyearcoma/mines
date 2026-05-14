@@ -3,6 +3,7 @@ import type {
   Difficulty,
   RoundConfig,
   RoundResult,
+  RevealScoreFeedback,
   ScoreBreakdown,
 } from "@/lib/engine";
 import type { CellEvent } from "@/lib/multiplayer/protocol";
@@ -30,7 +31,13 @@ export type GameStats = {
   seed: number;
   score: ScoreBreakdown;
   liveStreak: number;        // current in-round reveal streak (resets on hesitation)
-  liveMultiplier: number;    // current in-round score multiplier
+  liveMultiplier: number;    // current combined speed * accuracy multiplier
+  liveSpeedMultiplier: number;
+  liveAccuracyMultiplier: number;
+  accuracyStreak: number;
+  lives: number;
+  maxLives: number;
+  stunRemainingMs: number;
   timeLeftMs: number | null;
   cellsRevealed: number;     // safe non-mine cells uncovered this round
 };
@@ -64,7 +71,18 @@ type Events = {
   "board:snapshot": BoardSnapshot;
 
   // sound triggers (Phaser -> SoundDirector)
-  "sound:reveal": { count: number };
+  "sound:reveal": {
+    count: number;
+    streak?: number;
+    accuracyStreak?: number;
+    multiplier?: number;
+    speedMultiplier?: number;
+    accuracyMultiplier?: number;
+    tier?: RevealScoreFeedback["tier"];
+    hesitated?: boolean;
+    milestone?: boolean;
+  };
+  "sound:mistake": { lives: number; stunMs: number };
   "sound:flag": { on: boolean };
   "sound:chord": void;
   "sound:boom": void;

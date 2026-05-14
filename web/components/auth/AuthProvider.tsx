@@ -11,6 +11,7 @@ import {
 import type { Session, User } from "@supabase/supabase-js";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/types/db";
+import { capture, identify, resetAnalytics } from "@/lib/analytics/posthog";
 
 type AuthContextValue = {
   session: Session | null;
@@ -38,8 +39,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange(
-      (_event: string, s: Session | null) => {
+      (event: string, s: Session | null) => {
         setSession(s);
+        if (event === "SIGNED_IN" && s?.user) {
+          identify(s.user.id, {
+            email: s.user.email,
+            provider: s.user.app_metadata?.provider,
+          });
+          capture("user_signed_in", {
+            user_id: s.user.id,
+            provider: s.user.app_metadata?.provider,
+          });
+        } else if (event === "SIGNED_OUT") {
+          capture("user_signed_out");
+          resetAnalytics();
+        }
       },
     );
 

@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const src = resolve(__dirname, "..", "..", "assets");
+const src = resolve(__dirname, "..", "assets");
 const dest = resolve(__dirname, "..", "public", "assets", "audio");
 
 async function main() {

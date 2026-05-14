@@ -2,7 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import { bridge, type GameStats, type GameOverPayload } from "@/game/bridge";
+import type { Difficulty } from "@/lib/engine";
 import { getBrowserSupabase } from "@/lib/supabase/client";
+import { capture } from "@/lib/analytics/posthog";
 import { useAuth } from "./AuthProvider";
 
 export type SaveState =
@@ -28,7 +30,8 @@ export function GameRecorder({
     const onStats = (s: GameStats) => {
       statsRef.current = s;
     };
-    const onStart = () => {
+    const onStart = (p: { difficulty: Difficulty; seed: number }) => {
+      capture("solo_game_started", { difficulty: p.difficulty, seed: p.seed });
       onSaveStateChange?.({ kind: "idle" });
     };
     const onReset = () => {
@@ -36,9 +39,19 @@ export function GameRecorder({
     };
 
     const onOver = async (p: GameOverPayload) => {
+      const s = statsRef.current;
+      capture("solo_game_completed", {
+        won: p.won,
+        difficulty: s?.difficulty,
+        seed: s?.seed,
+        elapsed_ms: p.elapsedMs,
+        opens: p.opens,
+        clicks: p.clicks,
+        flagged: p.flagged,
+        post_loss_hint_count: p.postLossHintCount,
+      });
       const u = userRef.current;
       if (!u) return;
-      const s = statsRef.current;
       if (!s) return;
       onSaveStateChange?.({ kind: "saving" });
       try {

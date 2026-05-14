@@ -4,6 +4,7 @@ import type { GameStats } from "@/game/bridge";
 import type { MatchSnapshot } from "@/lib/store/match";
 import type { ScoreSnapshot } from "@/lib/multiplayer/protocol";
 import { fmtTime, pad } from "@/lib/format";
+import { ComboBadge } from "./ComboBadge";
 import { HudReadout } from "../primitives/HudReadout";
 
 const MATCH_ROUNDS = 5;
@@ -93,9 +94,16 @@ export function MatchHUD({
         tone={lowTime ? "red" : "gold"}
         minWidth={130}
       />
-      <MultBadge
+      <ComboBadge
         multiplier={stats.liveMultiplier}
+        speedMultiplier={stats.liveSpeedMultiplier}
+        accuracyMultiplier={stats.liveAccuracyMultiplier}
         streak={stats.liveStreak}
+        accuracyStreak={stats.accuracyStreak}
+        lives={stats.lives}
+        maxLives={stats.maxLives}
+        stunRemainingMs={stats.stunRemainingMs}
+        minWidth={190}
       />
       <HudReadout
         label="mines"
@@ -135,55 +143,6 @@ function mapWinner(
 ): "you" | "opp" | null {
   if (winner === null || winner === undefined) return null;
   return winner === youAre ? "you" : "opp";
-}
-
-function MultBadge({
-  multiplier,
-  streak,
-}: {
-  multiplier: number;
-  streak: number;
-}) {
-  const active = streak > 0 && multiplier > 1.001;
-  const hot = multiplier >= 2.5;
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        padding: "4px 12px",
-        minWidth: 100,
-        border: "1px solid var(--line)",
-        borderRadius: 8,
-        background: active
-          ? hot
-            ? "linear-gradient(180deg, rgba(255,90,90,0.18), rgba(0,0,0,0.25))"
-            : "linear-gradient(180deg, rgba(227,178,72,0.16), rgba(0,0,0,0.25))"
-          : "rgba(0,0,0,0.25)",
-        transition: "background 120ms ease",
-      }}
-    >
-      <div
-        className="mono upper"
-        style={{ fontSize: 9, color: "var(--ink-mute)" }}
-      >
-        combo · ×{streak}
-      </div>
-      <div
-        className="disp"
-        style={{
-          fontSize: 28,
-          lineHeight: 1,
-          fontWeight: 800,
-          color: active ? (hot ? "var(--red, #ff6b6b)" : "var(--gold)") : "var(--ink-2)",
-          textShadow: hot ? "0 0 14px rgba(255,90,90,0.5)" : "none",
-        }}
-      >
-        ×{multiplier.toFixed(2)}
-      </div>
-    </div>
-  );
 }
 
 // Score gap between you and opponent. Goes red and pulses when you're behind,

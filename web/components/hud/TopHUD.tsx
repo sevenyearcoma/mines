@@ -3,6 +3,7 @@
 import { DIFFS, type Difficulty } from "@/lib/engine";
 import { bridge, type GameStats } from "@/game/bridge";
 import { fmtTime, pad } from "@/lib/format";
+import { ComboBadge } from "./ComboBadge";
 import { HudReadout } from "../primitives/HudReadout";
 
 export function TopHUD({ stats }: { stats: GameStats }) {
@@ -30,26 +31,17 @@ export function TopHUD({ stats }: { stats: GameStats }) {
 
       <div style={{ flex: 1 }} />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 5, width: 220 }}>
-        <div
-          className="mono upper"
-          style={{
-            fontSize: 9,
-            color: "var(--ink-mute)",
-            display: "flex",
-            justifyContent: "space-between",
-          }}
-        >
-          <span>streak · ×{stats.streak}</span>
-          <span className="gold">{stats.streakBest} best</span>
-        </div>
-        <div className="streak-meter">
-          <div
-            className="streak-fill"
-            style={{ width: Math.min(100, stats.streak * 20) + "%" }}
-          />
-        </div>
-      </div>
+      <ComboBadge
+        multiplier={stats.liveMultiplier}
+        speedMultiplier={stats.liveSpeedMultiplier}
+        accuracyMultiplier={stats.liveAccuracyMultiplier}
+        streak={stats.liveStreak}
+        accuracyStreak={stats.accuracyStreak}
+        lives={stats.lives}
+        maxLives={stats.maxLives}
+        stunRemainingMs={stats.stunRemainingMs}
+        minWidth={190}
+      />
 
       <div style={{ width: 1, height: 36, background: "var(--line)" }} />
 

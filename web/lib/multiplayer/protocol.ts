@@ -18,7 +18,13 @@ export type OpponentStatus =
 export interface ScoreSnapshot {
   total: number;
   liveMultiplier: number;
+  liveSpeedMultiplier?: number;
+  liveAccuracyMultiplier?: number;
   liveStreak: number;
+  accuracyStreak?: number;
+  lives?: number;
+  maxLives?: number;
+  stunRemainingMs?: number;
   status: OpponentStatus;
   // Non-weaponizable progress signals: counts only, never positions.
   cellsRevealed: number;

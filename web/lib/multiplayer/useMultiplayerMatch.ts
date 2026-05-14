@@ -199,7 +199,13 @@ function wireBridgeListeners(refs: {
     const snap: ScoreSnapshot = {
       total: stats.score.total,
       liveMultiplier: stats.liveMultiplier,
+      liveSpeedMultiplier: stats.liveSpeedMultiplier,
+      liveAccuracyMultiplier: stats.liveAccuracyMultiplier,
       liveStreak: stats.liveStreak,
+      accuracyStreak: stats.accuracyStreak,
+      lives: stats.lives,
+      maxLives: stats.maxLives,
+      stunRemainingMs: stats.stunRemainingMs,
       status: "playing",
       cellsRevealed: stats.cellsRevealed,
     };

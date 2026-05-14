@@ -9,7 +9,11 @@ const ZERO_SCORE = {
   combo: 0,
   speed: 0,
   peakStreak: 0,
+  peakAccuracyStreak: 0,
   peakMultiplier: 1,
+  peakSpeedMultiplier: 1,
+  peakAccuracyMultiplier: 1,
+  mistakes: 0,
   total: 0,
 };
 
@@ -27,6 +31,12 @@ const initial: GameStats = {
   score: ZERO_SCORE,
   liveStreak: 0,
   liveMultiplier: 1,
+  liveSpeedMultiplier: 1,
+  liveAccuracyMultiplier: 1,
+  accuracyStreak: 0,
+  lives: 3,
+  maxLives: 3,
+  stunRemainingMs: 0,
   timeLeftMs: null,
   cellsRevealed: 0,
 };

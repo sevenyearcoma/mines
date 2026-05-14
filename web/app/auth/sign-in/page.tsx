@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getBrowserSupabase } from "@/lib/supabase/client";
+import { capture } from "@/lib/analytics/posthog";
 
 export default function SignInPage() {
   return (
@@ -29,6 +30,7 @@ function SignInForm() {
     typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
 
   async function signInWithGitHub() {
+    capture("sign_in_initiated", { method: "github" });
     setStatus({ kind: "sending" });
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "github",
@@ -40,13 +42,17 @@ function SignInForm() {
   async function sendMagicLink(e: React.FormEvent) {
     e.preventDefault();
     if (!email) return;
+    capture("sign_in_initiated", { method: "magic_link", email });
     setStatus({ kind: "sending" });
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: redirectTo },
     });
     if (error) setStatus({ kind: "error", message: error.message });
-    else setStatus({ kind: "sent", email });
+    else {
+      capture("sign_in_email_sent", { email });
+      setStatus({ kind: "sent", email });
+    }
   }
 
   return (

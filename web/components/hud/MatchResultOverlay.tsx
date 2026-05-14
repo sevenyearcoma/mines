@@ -1,10 +1,12 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { useEffect } from "react";
 import type { RoundResult } from "@/lib/engine";
 import type { MatchSnapshot } from "@/lib/store/match";
 import type { RoundEndPayload } from "@/lib/multiplayer/protocol";
 import { fmtTime } from "@/lib/format";
+import { capture } from "@/lib/analytics/posthog";
 import { HudReadout } from "../primitives/HudReadout";
 import { Ornament } from "../primitives/Ornament";
 
@@ -27,6 +29,42 @@ export function MatchResultOverlay({
   // Match-complete-without-roundEnd is a forfeit before the first round
   // ever finished — also worth showing.
   const visible = (roundEnd !== null || matchComplete) && snapshot !== null;
+
+  useEffect(() => {
+    if (!snapshot || !roundEnd) return;
+    const youWon = roundEnd.winner === snapshot.youAre;
+    capture("match_round_completed", {
+      round_index: roundEnd.roundIndex,
+      you_won: youWon,
+      your_reason: roundEnd.yourResult.reason,
+      your_score_total: roundEnd.yourResult.score.total,
+      your_score_base: roundEnd.yourResult.score.base,
+      your_score_combo: roundEnd.yourResult.score.combo,
+      your_score_speed: roundEnd.yourResult.score.speed,
+      your_peak_multiplier: roundEnd.yourResult.score.peakMultiplier,
+      your_peak_speed_multiplier: roundEnd.yourResult.score.peakSpeedMultiplier,
+      your_peak_accuracy_multiplier:
+        roundEnd.yourResult.score.peakAccuracyMultiplier,
+      your_mistakes: roundEnd.yourResult.score.mistakes,
+      your_elapsed_ms: roundEnd.yourResult.elapsedMs,
+      your_opens: roundEnd.yourResult.opens,
+      opponent_reason: roundEnd.opponentResult.reason,
+      opponent_score_total: roundEnd.opponentResult.score.total,
+    });
+  }, [roundEnd, snapshot]);
+
+  useEffect(() => {
+    if (!snapshot || !matchComplete) return;
+    const youWon = snapshot.winner === snapshot.youAre;
+    capture("match_completed", {
+      you_won: youWon,
+      your_rounds_won: snapshot.roundsWon[snapshot.youAre],
+      opponent_rounds_won: snapshot.roundsWon[1 - snapshot.youAre],
+      end_reason: snapshot.endReason,
+      opponent_name: snapshot.players[1 - snapshot.youAre].name,
+    });
+  }, [matchComplete, snapshot]);
+
   if (!snapshot) return null;
 
   return (
@@ -301,9 +339,14 @@ function PlayerColumn({
           tone={result.score.speed > 0 ? "green" : "red"}
         />
         <HudReadout
-          label="peak ×"
-          value={result.score.peakMultiplier.toFixed(2)}
+          label="peak"
+          value={`x${result.score.peakMultiplier.toFixed(2)}`}
           tone={result.score.peakMultiplier >= 2 ? "green" : "gold"}
+        />
+        <HudReadout
+          label="spd/acc"
+          value={`${result.score.peakSpeedMultiplier.toFixed(1)}/${result.score.peakAccuracyMultiplier.toFixed(1)}`}
+          tone="gold"
         />
         <HudReadout
           label="time"
@@ -311,6 +354,11 @@ function PlayerColumn({
           tone="gold"
         />
         <HudReadout label="opens" value={result.opens} tone="gold" />
+        <HudReadout
+          label="hp lost"
+          value={result.score.mistakes}
+          tone={result.score.mistakes > 0 ? "red" : "green"}
+        />
       </div>
       <div style={{ marginTop: 10 }}>
         <HudReadout

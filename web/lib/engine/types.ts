@@ -64,10 +64,14 @@ export interface ActionLogEntry {
 // live-score feedback channel.
 export interface ScoreBreakdown {
   base: number;          // raw cells * BASE_PER_OPEN, no multiplier
-  combo: number;         // points earned from streak + combo multipliers
+  combo: number;         // points earned from speed + accuracy multipliers
   speed: number;         // end-of-round bonus, only awarded on clean wins
-  peakStreak: number;    // longest in-round reveal streak
+  peakStreak: number;    // longest in-round speed streak
+  peakAccuracyStreak: number;
   peakMultiplier: number;
+  peakSpeedMultiplier: number;
+  peakAccuracyMultiplier: number;
+  mistakes: number;
   total: number;
 }
 
