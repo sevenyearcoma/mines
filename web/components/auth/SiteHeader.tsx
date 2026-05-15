@@ -9,6 +9,7 @@ export function SiteHeader() {
   const { user, isGuest, loading } = useAuth();
   return (
     <header
+      className="site-header"
       style={{
         height: 48,
         flexShrink: 0,
@@ -25,7 +26,7 @@ export function SiteHeader() {
         zIndex: 4,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+      <div className="site-brand-nav" style={{ display: "flex", alignItems: "center", gap: 18 }}>
         <Link
           href="/"
           className="glow-gold"
@@ -41,14 +42,14 @@ export function SiteHeader() {
         >
           MINES
         </Link>
-        <nav style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <nav className="site-nav" style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <NavLink href="/daily">daily</NavLink>
           <NavLink href="/match">match</NavLink>
           <NavLink href="/leaderboard">leaderboard</NavLink>
           {user && <NavLink href="/friends">friends</NavLink>}
         </nav>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div className="site-actions" style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <ProToggle size="sm" label="Pro" />
         {!loading && !user && !isGuest && (
           <Link

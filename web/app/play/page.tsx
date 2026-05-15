@@ -78,12 +78,13 @@ export default function PlayPage() {
 
   return (
     <div
-      className="screen"
+      className="screen play-screen"
       style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
     >
       <MascotScene pose={mascot.pose} caption={mascot.caption} />
       <TopHUD stats={stats} />
       <div
+        className="play-layout"
         style={{
           flex: 1,
           display: "grid",
@@ -91,7 +92,10 @@ export default function PlayPage() {
           minHeight: 0,
         }}
       >
-        <div style={{ position: "relative", overflow: "hidden" }}>
+        <div
+          className="play-board-stage"
+          style={{ position: "relative", overflow: "hidden" }}
+        >
           <PhaserGame
             initialRound={initialRound}
             initialProgress={initialProgress}

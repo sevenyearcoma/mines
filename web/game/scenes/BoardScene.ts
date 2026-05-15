@@ -79,10 +79,18 @@ export default class BoardScene extends Phaser.Scene {
   private rightDown = false;
   private chordConsumed = false;
   private hoverCell: { r: number; c: number } | null = null;
+  private touchDownCell: { r: number; c: number } | null = null;
+  private touchHoldTimer?: Phaser.Time.TimerEvent;
+  private touchHandled = false;
+  private touchCancelled = false;
+  private touchStartX = 0;
+  private touchStartY = 0;
   private statsTimer?: Phaser.Time.TimerEvent;
   private originX = 0;
   private originY = 0;
   private readonly gap = 2;
+  private readonly touchHoldMs = 420;
+  private readonly touchMoveTolerance = 12;
   // Spectator state: when on, all input is disabled and the local engine is
   // frozen. Remote events drive the visuals only.
   private spectator = false;
@@ -165,6 +173,7 @@ export default class BoardScene extends Phaser.Scene {
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.soundDirector?.destroy();
       this.clearStunFx();
+      this.clearTouchGesture();
       bridge.off("cmd:reset", this.resetBoard);
       bridge.off("cmd:setDifficulty", this.changeDifficulty);
       bridge.off("cmd:loadRound", this.loadRound);
@@ -208,6 +217,7 @@ export default class BoardScene extends Phaser.Scene {
     this.rightDown = false;
     this.chordConsumed = false;
     this.hoverCell = null;
+    this.clearTouchGesture();
     this.spectator = false;
     this.spectatorName = "";
     this.lastProgressEmitAt = 0;
@@ -448,28 +458,91 @@ export default class BoardScene extends Phaser.Scene {
     g.strokeRoundedRect(1, 1, s - 2, s - 2, 4);
   }
 
-  private layout() {
+  private framePadForSize(s: number): number {
+    return Math.max(6, Math.min(18, Math.round(s * 0.45)));
+  }
+
+  private frameRadiusForSize(s: number): number {
+    return Math.max(6, Math.min(14, Math.round(s * 0.45)));
+  }
+
+  private fittedCellSize(): number {
+    const base = cellSizeFor(this.cols);
+    const width = Math.max(1, this.scale.width);
+    const height = Math.max(1, this.scale.height);
+    const margin = width <= 520 ? 8 : 16;
+    let fitted = base;
+
+    for (let i = 0; i < 2; i++) {
+      const pad = this.framePadForSize(fitted);
+      const fitW = Math.floor(
+        (width - margin * 2 - pad * 2 - (this.cols - 1) * this.gap) /
+          this.cols,
+      );
+      const fitH = Math.floor(
+        (height - margin * 2 - pad * 2 - (this.rows - 1) * this.gap) /
+          this.rows,
+      );
+      fitted = Math.min(base, fitW, fitH);
+    }
+
+    const min = this.cols > 20 ? 7 : this.cols > 10 ? 10 : 18;
+    return Math.max(min, Math.min(base, Math.floor(fitted)));
+  }
+
+  private resizeTileVisuals() {
     const s = this.size;
-    const pad = 18;
-    const w = this.cols * s + (this.cols - 1) * 2;
-    const h = this.rows * s + (this.rows - 1) * 2;
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const t = this.tiles[r]?.[c];
+        if (!t) continue;
+
+        t.container.setSize(s, s);
+        t.number.setPosition(s / 2, s / 2);
+        t.number.setFontSize(`${Math.floor(s * 0.62)}px`);
+        this.drawCover(t.cover, s, false);
+        if (t.reveal.visible) this.drawRevealed(t.reveal, s);
+        if (t.flag.visible) this.drawFlag(t.flag, s);
+        if (t.bomb.visible) this.drawBomb(t.bomb, s, false);
+        if (t.hint.visible) this.drawHint(t.hint, s);
+      }
+    }
+  }
+
+  private layout() {
+    const nextSize = this.fittedCellSize();
+    if (nextSize !== this.size) {
+      this.size = nextSize;
+      this.resizeTileVisuals();
+    }
+
+    const s = this.size;
+    const pad = this.framePadForSize(s);
+    const radius = this.frameRadiusForSize(s);
+    const innerRadius = Math.max(4, radius - 5);
+    const w = this.cols * s + (this.cols - 1) * this.gap;
+    const h = this.rows * s + (this.rows - 1) * this.gap;
 
     const frameW = w + pad * 2;
     const frameH = h + pad * 2;
-    const cx = this.scale.width / 2;
-    const cy = this.scale.height / 2;
-    const ox = cx - frameW / 2;
-    const oy = cy - frameH / 2;
+    const ox = Math.max(4, Math.round((this.scale.width - frameW) / 2));
+    const oy = Math.max(4, Math.round((this.scale.height - frameH) / 2));
 
     this.frame.clear();
     // outer frame: very faint panel fill so the mascot reads through, plus the
     // signature gold border.
     this.frame.fillStyle(0x0f1418, 0.55);
-    this.frame.fillRoundedRect(ox, oy, frameW, frameH, 14);
+    this.frame.fillRoundedRect(ox, oy, frameW, frameH, radius);
     this.frame.lineStyle(2, 0xb48127);
-    this.frame.strokeRoundedRect(ox, oy, frameW, frameH, 14);
+    this.frame.strokeRoundedRect(ox, oy, frameW, frameH, radius);
     this.frame.lineStyle(1, 0xe3b248, 0.3);
-    this.frame.strokeRoundedRect(ox + 6, oy + 6, frameW - 12, frameH - 12, 9);
+    this.frame.strokeRoundedRect(
+      ox + 6,
+      oy + 6,
+      frameW - 12,
+      frameH - 12,
+      innerRadius,
+    );
 
     // position tiles and cache origin for pointer math
     const x0 = ox + pad;
@@ -499,7 +572,51 @@ export default class BoardScene extends Phaser.Scene {
     return { r, c };
   }
 
+  private isTouchPointer(p: Phaser.Input.Pointer): boolean {
+    const pointerType = (p as { pointerType?: string }).pointerType;
+    const event = p.event as
+      | (Event & {
+          pointerType?: string;
+          touches?: TouchList;
+          changedTouches?: TouchList;
+        })
+      | undefined;
+    return (
+      pointerType === "touch" ||
+      pointerType === "pen" ||
+      event?.pointerType === "touch" ||
+      event?.pointerType === "pen" ||
+      event?.touches !== undefined ||
+      event?.changedTouches !== undefined
+    );
+  }
+
+  private preventTouchDefault(p: Phaser.Input.Pointer): void {
+    p.event?.preventDefault?.();
+  }
+
+  private clearTouchGesture() {
+    this.touchHoldTimer?.remove(false);
+    this.touchHoldTimer = undefined;
+    this.touchDownCell = null;
+    this.touchHandled = false;
+    this.touchCancelled = false;
+  }
+
   private handlePointerMove = (p: Phaser.Input.Pointer) => {
+    if (this.isTouchPointer(p)) {
+      if (this.touchDownCell) {
+        const dx = p.x - this.touchStartX;
+        const dy = p.y - this.touchStartY;
+        if (Math.hypot(dx, dy) > this.touchMoveTolerance) {
+          this.touchCancelled = true;
+          this.touchHoldTimer?.remove(false);
+          this.touchHoldTimer = undefined;
+        }
+      }
+      return;
+    }
+
     const cell = this.cellFromPointer(p);
     const prevR = this.hoverCell?.r;
     const prevC = this.hoverCell?.c;
@@ -522,6 +639,26 @@ export default class BoardScene extends Phaser.Scene {
 
   private handlePointerDown = (p: Phaser.Input.Pointer) => {
     if (this.gameOver || this.spectator || this.isStunned()) return;
+    if (this.isTouchPointer(p)) {
+      this.preventTouchDefault(p);
+      this.clearTouchGesture();
+      const cell = this.cellFromPointer(p);
+      this.touchDownCell = cell;
+      this.touchStartX = p.x;
+      this.touchStartY = p.y;
+      if (cell) {
+        this.touchHoldTimer = this.time.delayedCall(this.touchHoldMs, () => {
+          const held = this.touchDownCell;
+          if (!held || this.gameOver || this.spectator || this.isStunned()) return;
+          this.touchHandled = true;
+          const boardCell = this.board[held.r]?.[held.c];
+          if (boardCell?.revealed) this.tryChord(held.r, held.c);
+          else this.tryFlag(held.r, held.c);
+        });
+      }
+      return;
+    }
+
     if (p.leftButtonDown()) this.leftDown = true;
     if (p.rightButtonDown()) this.rightDown = true;
     if (this.leftDown && this.rightDown && !this.chordConsumed) {
@@ -534,6 +671,32 @@ export default class BoardScene extends Phaser.Scene {
   };
 
   private handlePointerUp = (p: Phaser.Input.Pointer) => {
+    if (this.isTouchPointer(p)) {
+      this.preventTouchDefault(p);
+      const downCell = this.touchDownCell;
+      const handled = this.touchHandled;
+      const cancelled = this.touchCancelled;
+      const upCell = this.cellFromPointer(p);
+      this.clearTouchGesture();
+
+      if (
+        !handled &&
+        !cancelled &&
+        !this.gameOver &&
+        !this.spectator &&
+        !this.isStunned() &&
+        downCell &&
+        upCell &&
+        downCell.r === upCell.r &&
+        downCell.c === upCell.c
+      ) {
+        const boardCell = this.board[upCell.r]?.[upCell.c];
+        if (boardCell?.revealed) this.tryChord(upCell.r, upCell.c);
+        else this.tryReveal(upCell.r, upCell.c);
+      }
+      return;
+    }
+
     const wasLeft = p.leftButtonReleased();
     const wasRight = p.rightButtonReleased();
     if (!this.gameOver && !this.spectator && !this.isStunned() && !this.chordConsumed) {
@@ -721,6 +884,7 @@ export default class BoardScene extends Phaser.Scene {
     this.leftDown = false;
     this.rightDown = false;
     this.chordConsumed = false;
+    this.clearTouchGesture();
 
     const events: CellEvent[] = [...this.toRevealEvents(revealed)];
     if (boom) events.push({ kind: "boom", r: boom.r, c: boom.c });

@@ -25,6 +25,7 @@ export function SidePanel({
   const eff = stats.clicks > 0 ? Math.round((stats.opens / stats.clicks) * 100) : 0;
   return (
     <div
+      className="play-side-panel"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -128,6 +129,15 @@ export function SidePanel({
 
       <div className="div-label">how to</div>
       <div className="mono" style={{ fontSize: 11, color: "var(--ink-2)", lineHeight: 1.9 }}>
+        <div>
+          <span className="gold">tap</span> reveal
+        </div>
+        <div>
+          <span className="gold">hold</span> flag
+        </div>
+        <div>
+          <span className="gold">tap #</span> chord
+        </div>
         <div>
           <span className="gold">L</span> reveal
         </div>

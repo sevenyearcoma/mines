@@ -141,7 +141,7 @@ function MatchPageInner() {
 
   return (
     <div
-      className="screen"
+      className="screen play-screen match-screen"
       style={{
         flex: 1,
         display: "flex",
@@ -156,6 +156,7 @@ function MatchPageInner() {
         <div style={{ height: 70 }} />
       )}
       <div
+        className="play-board-stage match-board-stage"
         style={{
           flex: 1,
           position: "relative",

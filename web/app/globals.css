@@ -629,6 +629,20 @@ body::before {
 }
 .screen { animation: screen-in .25s ease-out both; }
 
+/* playable game surfaces */
+.play-layout {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+.play-board-stage {
+  min-width: 0;
+  min-height: 0;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+.play-board-stage canvas {
+  touch-action: none;
+}
+
 /* utility */
 .gold { color: var(--gold-glow); }
 .red  { color: var(--red-glow); }
@@ -1190,6 +1204,173 @@ body::before {
 }
 
 @media (max-width: 760px) {
+  .site-header {
+    height: auto !important;
+    min-height: 48px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px !important;
+  }
+
+  .site-brand-nav {
+    flex: 1 1 100%;
+    min-width: 0;
+    gap: 10px !important;
+  }
+
+  .site-nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 10px !important;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .site-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .site-nav a {
+    font-size: 9px !important;
+    letter-spacing: 0.14em !important;
+    white-space: nowrap;
+  }
+
+  .site-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    gap: 8px !important;
+  }
+
+  .site-actions .btn {
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+  }
+
+  .play-screen {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .match-screen {
+    padding-left: 0 !important;
+  }
+
+  .play-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .play-side-panel {
+    display: none !important;
+  }
+
+  .play-hud {
+    align-items: stretch !important;
+    gap: 6px !important;
+    padding: 8px 10px !important;
+  }
+
+  .play-hud-spacer,
+  .play-hud-divider {
+    display: none !important;
+  }
+
+  .play-hud .hud {
+    flex: 1 1 calc(33.333% - 6px);
+    min-width: 0 !important;
+    padding: 6px 8px;
+    border-radius: 6px;
+  }
+
+  .play-hud .hud-label {
+    font-size: 7px;
+    letter-spacing: 0.13em;
+  }
+
+  .play-hud .hud-value {
+    font-size: 22px;
+  }
+
+  .play-hud-combo {
+    order: 4;
+    flex: 1 1 100%;
+    min-width: 0 !important;
+    gap: 3px !important;
+    padding: 5px 8px !important;
+    border-radius: 6px !important;
+  }
+
+  .play-hud-combo .disp {
+    font-size: 22px !important;
+  }
+
+  .play-difficulty-tabs {
+    order: 5;
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: space-between;
+  }
+
+  .play-difficulty-tabs button {
+    flex: 1 1 0;
+    padding: 7px 4px !important;
+    font-size: 9px !important;
+  }
+
+  .play-new-button {
+    order: 5;
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+  }
+
+  .daily-hud-title {
+    flex: 1 1 100%;
+    min-width: 0 !important;
+  }
+
+  .daily-hud-title .disp {
+    font-size: 16px !important;
+  }
+
+  .match-hud [data-match-score-slot] {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0 !important;
+    padding: 4px 8px 5px !important;
+  }
+
+  .match-lead-delta {
+    order: 3;
+    flex: 0 0 54px;
+    min-width: 54px !important;
+    padding: 0 4px !important;
+  }
+
+  .match-round-label {
+    order: 4;
+    flex: 1 1 auto;
+    text-align: center;
+    font-size: 8px !important;
+  }
+
+  .match-hud .hud {
+    order: 5;
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  .match-hud .play-hud-combo {
+    order: 6;
+  }
+
+  .match-round-pips {
+    order: 7;
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
   .home-shell {
     padding: 18px;
     overflow-x: hidden;
@@ -1255,6 +1436,29 @@ body::before {
 }
 
 /* ─── casino polish utilities ─────────────────────────── */
+@media (max-width: 420px) {
+  .play-hud {
+    gap: 5px !important;
+    padding: 7px 8px !important;
+  }
+
+  .play-hud .hud {
+    padding: 5px 6px;
+  }
+
+  .play-hud .hud-value {
+    font-size: 20px;
+  }
+
+  .play-hud-combo {
+    padding: 5px 7px !important;
+  }
+
+  .play-difficulty-tabs button {
+    letter-spacing: 0.1em !important;
+  }
+}
+
 .glow-gold {
   text-shadow:
     0 0 18px rgba(255, 212, 114, 0.55),

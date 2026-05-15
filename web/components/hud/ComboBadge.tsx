@@ -1,5 +1,7 @@
 "use client";
 
+import type { CSSProperties } from "react";
+
 export function ComboBadge({
   multiplier,
   speedMultiplier = multiplier,
@@ -10,6 +12,8 @@ export function ComboBadge({
   maxLives,
   stunRemainingMs = 0,
   minWidth = 112,
+  className,
+  style,
 }: {
   multiplier: number;
   speedMultiplier?: number;
@@ -20,6 +24,8 @@ export function ComboBadge({
   maxLives?: number;
   stunRemainingMs?: number;
   minWidth?: number;
+  className?: string;
+  style?: CSSProperties;
 }) {
   const stunned = stunRemainingMs > 0;
   const active = streak > 0 && multiplier > 1.001;
@@ -32,6 +38,7 @@ export function ComboBadge({
 
   return (
     <div
+      className={className}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -58,6 +65,7 @@ export function ComboBadge({
         transform: maxed ? "translateY(-1px)" : "none",
         transition:
           "background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease",
+        ...style,
       }}
     >
       <div

@@ -43,9 +43,11 @@ export function MatchHUD({
 
   return (
     <div
+      className="play-hud match-hud"
       style={{
         display: "flex",
         alignItems: "center",
+        flexWrap: "wrap",
         gap: 14,
         padding: "18px 28px",
         borderBottom: "1.5px solid var(--line)",
@@ -74,10 +76,10 @@ export function MatchHUD({
         opponentStatus={opponentLive?.status}
       />
 
-      <div style={{ width: 1, height: 36, background: "var(--line)" }} />
+      <div className="play-hud-divider" style={{ width: 1, height: 36, background: "var(--line)" }} />
 
       <div
-        className="mono upper"
+        className="mono upper match-round-label"
         style={{
           fontSize: 10,
           letterSpacing: "0.18em",
@@ -95,6 +97,7 @@ export function MatchHUD({
         minWidth={130}
       />
       <ComboBadge
+        className="play-hud-combo"
         multiplier={stats.liveMultiplier}
         speedMultiplier={stats.liveSpeedMultiplier}
         accuracyMultiplier={stats.liveAccuracyMultiplier}
@@ -112,9 +115,9 @@ export function MatchHUD({
         minWidth={100}
       />
 
-      <div style={{ flex: 1 }} />
+      <div className="play-hud-spacer" style={{ flex: 1 }} />
 
-      <div style={{ display: "flex", gap: 6 }}>
+      <div className="match-round-pips" style={{ display: "flex", gap: 6 }}>
         {Array.from({ length: MATCH_ROUNDS }).map((_, i) => (
           <RoundPip
             key={i}
@@ -166,6 +169,7 @@ function LeadDelta({ lead }: { lead: number }) {
   const abs = Math.abs(lead);
   return (
     <div
+      className="match-lead-delta"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -234,6 +238,7 @@ function ScoreSlot({
   const hot = liveMultiplier >= 2.5;
   return (
     <div
+      data-match-score-slot="true"
       style={{
         display: "flex",
         flexDirection: "column",

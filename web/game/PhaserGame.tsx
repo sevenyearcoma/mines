@@ -86,7 +86,12 @@ export default function PhaserGame({
   return (
     <div
       ref={hostRef}
-      style={{ position: "absolute", inset: 0, overflow: "hidden" }}
+      style={{
+        position: "absolute",
+        inset: 0,
+        overflow: "hidden",
+        touchAction: "none",
+      }}
     />
   );
 }

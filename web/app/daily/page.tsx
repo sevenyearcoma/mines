@@ -189,12 +189,15 @@ export default function DailyPage() {
 
   return (
     <div
-      className="screen"
+      className="screen play-screen"
       style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
     >
       <MascotScene pose={dailyMascot.pose} caption={dailyMascot.caption} />
       <DailyHUD dateUtc={dateUtc} stats={stats} />
-      <div style={{ flex: 1, position: "relative", overflow: "hidden", minHeight: 0 }}>
+      <div
+        className="play-board-stage"
+        style={{ flex: 1, position: "relative", overflow: "hidden", minHeight: 0 }}
+      >
         <PhaserGame key={`daily-${dateUtc}`} initialRound={round} />
         <DailyRecorder dateUtc={dateUtc} onSaveStateChange={setSave} />
         <DailyResultOverlay over={over} save={save} />
@@ -234,16 +237,21 @@ function DailyHUD({ dateUtc, stats }: { dateUtc: string; stats: ReturnType<typeo
   const seconds = Math.floor(stats.elapsedMs / 1000);
   return (
     <div
+      className="play-hud daily-hud"
       style={{
         display: "flex",
         alignItems: "center",
+        flexWrap: "wrap",
         gap: 14,
         padding: "18px 28px",
         borderBottom: "1.5px solid var(--line)",
         background: "linear-gradient(180deg, var(--panel), transparent)",
       }}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 180 }}>
+      <div
+        className="daily-hud-title"
+        style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 180 }}
+      >
         <div className="mono upper" style={{ fontSize: 9, letterSpacing: "0.22em", color: "var(--red, #ff8a8a)" }}>
           ● daily · {dateUtc}
         </div>
@@ -252,15 +260,16 @@ function DailyHUD({ dateUtc, stats }: { dateUtc: string; stats: ReturnType<typeo
         </div>
       </div>
 
-      <div style={{ width: 1, height: 36, background: "var(--line)" }} />
+      <div className="play-hud-divider" style={{ width: 1, height: 36, background: "var(--line)" }} />
 
       <HudReadout label="mines" value={pad(stats.remaining)} tone="red" minWidth={110} />
       <HudReadout label="time" value={fmtTime(seconds)} tone="gold" minWidth={130} />
       <HudReadout label="opens" value={pad(stats.opens)} tone="gold" minWidth={100} />
 
-      <div style={{ flex: 1 }} />
+      <div className="play-hud-spacer" style={{ flex: 1 }} />
 
       <ComboBadge
+        className="play-hud-combo"
         multiplier={stats.liveMultiplier}
         speedMultiplier={stats.liveSpeedMultiplier}
         accuracyMultiplier={stats.liveAccuracyMultiplier}

@@ -11,9 +11,11 @@ export function TopHUD({ stats }: { stats: GameStats }) {
   const timeLow = seconds > 60;
   return (
     <div
+      className="play-hud"
       style={{
         display: "flex",
         alignItems: "center",
+        flexWrap: "wrap",
         gap: 14,
         padding: "18px 28px",
         borderBottom: "1.5px solid var(--line)",
@@ -29,9 +31,10 @@ export function TopHUD({ stats }: { stats: GameStats }) {
       />
       <HudReadout label="opens" value={pad(stats.opens)} tone="gold" minWidth={110} />
 
-      <div style={{ flex: 1 }} />
+      <div className="play-hud-spacer" style={{ flex: 1 }} />
 
       <ComboBadge
+        className="play-hud-combo"
         multiplier={stats.liveMultiplier}
         speedMultiplier={stats.liveSpeedMultiplier}
         accuracyMultiplier={stats.liveAccuracyMultiplier}
@@ -43,9 +46,13 @@ export function TopHUD({ stats }: { stats: GameStats }) {
         minWidth={190}
       />
 
-      <div style={{ width: 1, height: 36, background: "var(--line)" }} />
+      <div
+        className="play-hud-divider"
+        style={{ width: 1, height: 36, background: "var(--line)" }}
+      />
 
       <div
+        className="play-difficulty-tabs"
         style={{
           display: "flex",
           gap: 2,
@@ -82,7 +89,7 @@ export function TopHUD({ stats }: { stats: GameStats }) {
       </div>
 
       <button
-        className="btn btn-ghost"
+        className="btn btn-ghost play-new-button"
         onClick={() => bridge.emit("cmd:reset")}
         style={{ padding: "10px 14px", fontSize: 14 }}
       >
