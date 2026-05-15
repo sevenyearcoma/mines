@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { SiteHeader } from "@/components/auth/SiteHeader";
@@ -11,6 +11,20 @@ export const metadata: Metadata = {
   // Favicon is auto-wired by Next.js via the App Router file convention —
   // `web/app/icon.png` (sourced from web/assets/logo.png) gets injected as
   // <link rel="icon"> automatically. No metadata.icons needed.
+};
+
+// Viewport is the make-or-break for mobile. Without `width=device-width`,
+// iOS Safari renders the page at a virtual 980px width and zooms out, which
+// (a) makes every tap target microscopic and (b) makes media queries miss.
+// `maximum-scale=1` + `user-scalable=no` keep accidental pinch-zoom out of
+// the way of an action game.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#0a0d11",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({

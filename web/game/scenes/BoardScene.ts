@@ -106,6 +106,12 @@ export default class BoardScene extends Phaser.Scene {
     sparkTimer?: Phaser.Time.TimerEvent;
   } | null = null;
 
+  // True on mobile / touch devices. Used to skip non-essential tweens and
+  // particle effects — the single biggest CPU cost during cascades on a
+  // mid-tier phone. Final visual difference is a slightly less juicy reveal
+  // animation in exchange for a stable 45+ FPS.
+  private lowEnd = false;
+
   constructor() {
     super({ key: "BoardScene" });
   }
@@ -126,6 +132,13 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   create() {
+    // Detect once at scene creation — viewport size and pointer fidelity
+    // are stable enough for the lifetime of a session.
+    this.lowEnd =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
+
     // Transparent canvas (set via `transparent: true` in PhaserGame's game
     // config) lets the mascot rail behind show through the empty space
     // around the board.
@@ -947,25 +960,39 @@ export default class BoardScene extends Phaser.Scene {
       t.number.setText(String(cell.adj));
       t.number.setColor(NUM_COLORS[cell.adj] ?? "#fff");
       t.number.setVisible(true);
-      t.number.setScale(0.001);
+      // On low-end devices, skip the back-out scale tween — instant pop
+      // saves a tween per revealed cell during cascades (50+ cells = 50+
+      // overlapping tweens). The number still appears immediately.
+      if (this.lowEnd) {
+        t.number.setScale(1);
+      } else {
+        t.number.setScale(0.001);
+        this.tweens.add({
+          targets: t.number,
+          scale: 1,
+          ease: "Back.Out",
+          duration: 320,
+        });
+      }
+    }
+    // pop the reveal layer — same cascade-cost story; skip on low-end.
+    if (this.lowEnd) {
+      t.reveal.setScale(1);
+    } else {
+      t.reveal.setScale(0.84);
       this.tweens.add({
-        targets: t.number,
+        targets: t.reveal,
         scale: 1,
         ease: "Back.Out",
-        duration: 320,
+        duration: 280,
       });
     }
-    // pop the reveal layer
-    t.reveal.setScale(0.84);
-    this.tweens.add({
-      targets: t.reveal,
-      scale: 1,
-      ease: "Back.Out",
-      duration: 280,
-    });
   }
 
   private spawnParticles(r: number, c: number) {
+    // Particles are 4 add-blend circles per cell with a 700ms tween each —
+    // gorgeous on desktop, devastating on mobile during big cascades. Skip.
+    if (this.lowEnd) return;
     const t = this.tiles[r][c];
     if (!t) return;
     const cx = t.container.x + this.size / 2;

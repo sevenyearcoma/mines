@@ -133,6 +133,66 @@ body::before {
   body::before { display: none; }
 }
 
+/* ─── Low-end / mobile aggressive perf pass ──────────────────────
+   Every selector under this media query is here because it's a real cost
+   on mobile GPUs (compositing overlays, infinite animations, layered
+   gradients, large blurs). We strip the decoration; gameplay stays. */
+@media (max-width: 900px), (pointer: coarse) {
+  /* No body background gradients — flat dark only. */
+  body {
+    background: var(--bg) !important;
+    background-attachment: scroll !important;
+  }
+
+  /* No home-shell radial-gradient overlays. */
+  .home-shell::before {
+    display: none !important;
+  }
+
+  /* No infinite glints anywhere — they keep the compositor busy frame-after-frame. */
+  .streak-fill::after,
+  .wordmark::before {
+    animation: none !important;
+  }
+
+  /* No mascot caption pill on mobile (mascot itself is already hidden,
+     but the caption is a separate fixed element). */
+  .mascot-rail-caption {
+    display: none !important;
+  }
+
+  /* Per-cell pop animations create overlapping tweens during cascades. */
+  .cell.revealed,
+  .cell.revealed .num,
+  .cell.flagged::after {
+    animation: none !important;
+  }
+
+  /* Hint pulse is an infinite animation; on a board with 3+ hints it's
+     a measurable cost. */
+  .cell.hint-safe {
+    animation: none !important;
+  }
+
+  /* No box-shadow on cells — fillStyle is enough, the shadow is a paint cost
+     that doesn't read well at small cell sizes anyway. */
+  .cell {
+    box-shadow: inset 0 1px 0 var(--tile-edge-hi), inset 0 -1px 0 var(--tile-edge-lo) !important;
+    transition: none !important;
+  }
+}
+
+/* Respect user OS preference for reduced motion, anywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
 /* type utility */
 .disp { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.01em; line-height: .95; }
 .disp-it { font-family: var(--font-display); font-style: italic; font-weight: 600; letter-spacing: -0.01em; }

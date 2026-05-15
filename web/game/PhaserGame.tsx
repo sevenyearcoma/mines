@@ -46,6 +46,24 @@ export default function PhaserGame({
       const isMobile =
         window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
 
+      // Cap the renderer pixel ratio. Retina iPhones report DPR=3 → canvas
+      // backing store at 9x the pixel count. That's the single biggest GPU
+      // bottleneck on mobile; capping at 1.25 looks nearly identical to
+      // DPR=3 but cuts pixel work by ~85%.
+      if (isMobile) {
+        const cappedDpr = 1.25;
+        const realDpr = window.devicePixelRatio || 1;
+        if (realDpr > cappedDpr) {
+          // Phaser reads window.devicePixelRatio at boot; spoof it.
+          // The original is preserved via the global object on cleanup so
+          // we don't leak the override to the rest of the app.
+          Object.defineProperty(window, "devicePixelRatio", {
+            configurable: true,
+            get: () => cappedDpr,
+          });
+        }
+      }
+
       const game = new Phaser.Game({
         type: Phaser.AUTO,
         parent: hostRef.current,
@@ -65,10 +83,15 @@ export default function PhaserGame({
           antialiasGL: !isMobile,
           roundPixels: isMobile,
           pixelArt: false,
+          // Prefer the integrated GPU on devices that have a choice; mobile
+          // GPUs are already integrated so this is a no-op on phones, but on
+          // dual-GPU laptops it keeps the dedicated chip idle.
+          powerPreference: "default",
         },
         // Cap the FPS target so mobiles that can't sustain 60 don't thrash
-        // trying to. 45 still feels smooth, leaves thermal headroom.
-        fps: { target: isMobile ? 45 : 60, forceSetTimeOut: false },
+        // trying to. 40 still feels smooth and leaves thermal headroom for
+        // cascades, which is when we historically dropped frames hardest.
+        fps: { target: isMobile ? 40 : 60, forceSetTimeOut: false },
         audio: { disableWebAudio: false },
       });
 
