@@ -13,6 +13,15 @@ on a single click. The game wasn't broken. The packaging was.
 This is the showcase: a deployable, full-stack build that proves Minesweeper
 still has teeth when you stop treating it like a Windows accessory.
 
+## Live demo
+
+Review the deployed build here:
+
+**https://mines.halfyy.tech**
+
+That is the canonical production domain for this project. Use it for reviewer
+links, Supabase auth redirect URLs, and GitHub OAuth callback testing.
+
 ---
 
 ## The bet
@@ -157,7 +166,7 @@ the connection is back.
 | Real-time        | Socket.io 4                 | Battle-tested, namespace-free, reconnection semantics we trust.     |
 | Analytics        | PostHog                     | Self-hostable, product analytics that doesn't surveil players.       |
 | Hosting (web)    | Vercel                      | Best-in-class for Next.js. Zero config.                              |
-| Hosting (socket) | Railway (free tier)         | Long-lived processes. Vercel functions can't hold WebSockets.       |
+| Hosting (socket) | Railway                     | Long-lived processes. Vercel functions can't hold WebSockets.       |
 
 Everything is TypeScript end-to-end. Shared engine + protocol types live in
 `web/lib/` and are imported directly by the server build (the repo-root
@@ -166,6 +175,17 @@ Dockerfile pulls both into the image).
 ---
 
 ## Local development
+
+Prerequisites:
+
+- Node.js 22+
+- A Supabase project with the SQL in `supabase/migrations/` applied
+- Supabase project URL + anon key from Project Settings -> API
+
+For a new Supabase project, open the Supabase SQL Editor and run the migration
+files in `supabase/migrations/` in filename order (`0001_...` through
+`0008_...`). They create the tables, triggers, foreign keys, and RLS policies
+used by auth, leaderboards, daily completions, demos, and friends.
 
 ```bash
 # one-time
@@ -184,6 +204,25 @@ The combined dev script lives in the repo-root `package.json` and uses
 - `web/.env.local` — copy from `web/.env.example`
 - `server/.env`    — copy from `server/.env.example`
 
+Minimum local values:
+
+```bash
+# web/.env.local
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
+NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
+NEXT_PUBLIC_POSTHOG_ENABLED=false
+
+# server/.env
+SOCKET_PORT=3001
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_ANON_KEY=YOUR_ANON_KEY
+CORS_ORIGIN=http://localhost:3000
+```
+
+No Supabase service-role key or JWT secret is required. The socket server
+validates real users through Supabase Auth and also supports guest multiplayer.
+
 ### Type-checking everything
 
 ```bash
@@ -192,68 +231,72 @@ npm run typecheck   # runs tsc --noEmit in both web/ and server/
 
 ---
 
-## Deploying to Vercel + Railway
+## Deploying to Railway + Vercel
 
-### 1. Web app → Vercel
+### 1. Socket server -> Railway
+
+The Socket.io server cannot run on Vercel because serverless functions do not
+hold WebSocket connections. Deploy Railway first so the web app can build with a
+real `NEXT_PUBLIC_SOCKET_URL`.
+
+1. [railway.app](https://railway.app) -> New Project -> Deploy from GitHub repo.
+2. Leave **Root Directory** blank. The repo root has a `Dockerfile` and
+   `railway.json` that build the server image, and the Docker build needs both
+   `server/` and `web/lib/`.
+3. **Variables** tab -> add:
+   - `SUPABASE_URL` -> from Supabase Project Settings -> API
+   - `SUPABASE_ANON_KEY` -> from Supabase Project Settings -> API
+   - `CORS_ORIGIN` -> `https://mines.halfyy.tech`
+4. Railway injects `PORT` automatically; do not set `PORT` or `SOCKET_PORT` in
+   production.
+5. Once deployed, copy Railway's public URL, for example
+   `https://server-production-f06f.up.railway.app`.
+
+### 2. Web app -> Vercel
 
 1. Create a new Vercel project pointing at this GitHub repo.
-2. **Project Settings → General → Root Directory**: set to `web/`.
+2. **Project Settings -> General -> Root Directory**: set to `web/`.
 3. Framework preset: **Next.js** (auto-detected).
 4. **Environment Variables** (Production + Preview):
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `NEXT_PUBLIC_SOCKET_URL` — set this **after** Railway gives you the
-     server URL (step 2 below).
+   - `NEXT_PUBLIC_SOCKET_URL` -> the Railway public URL from step 1
    - `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` (optional)
-   - `NEXT_PUBLIC_POSTHOG_ENABLED=true` (optional)
+   - `NEXT_PUBLIC_POSTHOG_ENABLED=false` unless analytics are configured
 5. Click **Deploy**.
-
-### 2. Socket server → Railway
-
-The Socket.io server cannot run on Vercel — serverless functions don't hold
-WebSocket connections. Railway's free tier handles long-lived processes
-cleanly.
-
-1. [railway.app](https://railway.app) → New Project → Deploy from GitHub repo.
-2. **Settings → Source**: leave **Root Directory** blank (repo root). The repo
-   root has a `Dockerfile` and `railway.json` that build the server image —
-   it needs access to both `server/` and `web/lib/` (shared types) so the
-   build context must be the repo root.
-3. **Variables** tab — add:
-   - `SUPABASE_URL` — from Supabase project
-   - `SUPABASE_ANON_KEY` — from Supabase project
-   - `SUPABASE_JWT_SECRET` — from Supabase Project Settings → API → JWT Secret
-   - `CORS_ORIGIN` — your Vercel production URL, e.g. `https://mines.vercel.app`
-4. Railway will inject `PORT` automatically; the server already reads it.
-5. Once deployed, copy Railway's public URL (e.g.
-   `https://mines-server.up.railway.app`) and paste it into Vercel's
-   `NEXT_PUBLIC_SOCKET_URL` env var. Redeploy Vercel.
 
 ### 3. Supabase auth callback
 
 In the Supabase dashboard:
 
-- **Authentication → URL Configuration → Site URL**: `https://mines.vercel.app`
-- **Redirect URLs**: add `https://mines.vercel.app/auth/callback`
+- **Authentication -> URL Configuration -> Site URL**:
+  `https://mines.halfyy.tech`
+- **Redirect URLs**:
+  - `https://mines.halfyy.tech/auth/callback`
+  - `http://localhost:3000/auth/callback` for local development
 
 OAuth and magic-link flows now round-trip through production.
 
 ### 4. Verify
 
-- Visit the Vercel URL — home loads, "Start playing →" jumps into a solo board.
-- Visit `/match` from two browser windows — both connect to Railway's socket,
+- Visit `https://mines.halfyy.tech` -> home loads, "Start playing ->" jumps into
+  a solo board.
+- Visit `/match` from two browser windows -> both connect to Railway's socket,
   matchmaking pairs them up.
 - If `/match` shows the "PvP server unreachable" card, the Railway service is
   cold-starting or down. Click **Retry connection** once it comes back up.
+
+Cost note: Vercel Hobby and Supabase Free are enough for showcase traffic.
+Railway's free allowance may cover light demos, but budget about `$5/mo` for
+Railway Hobby if you want predictable always-on socket uptime.
 
 ---
 
 ## Branding
 
-Drop a square `logo.png` (≥256×256) into `web/assets/`. The prebuild script
-(`web/scripts/copy-assets.mjs`) copies it to `web/public/assets/logo.png`,
-and `web/app/layout.tsx` references it via `metadata.icons`. Hard-refresh
-to see the new tab icon. No other wiring required.
+The tab icon is `web/app/icon.png`, sourced from `web/assets/logo.png`. Next.js
+App Router wires `app/icon.png` automatically as the favicon. Hard-refresh to
+see icon changes after deploy.
 
 ---
 

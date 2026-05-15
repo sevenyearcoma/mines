@@ -114,7 +114,11 @@ Desktop.ini
 $RECYCLE.BIN/
 
 # =============================================================================
-# Supabase (root folder only; migrations and local state are excluded)
+# Supabase local state. Keep migrations in git so a fresh clone can create the
+# database schema needed for local development.
 # =============================================================================
-/supabase/
+/supabase/*
+!/supabase/migrations/
+!/supabase/migrations/*.sql
+/supabase/.temp/
 .env.local
