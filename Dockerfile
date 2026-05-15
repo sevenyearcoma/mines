@@ -7,7 +7,7 @@
 #
 # Railway: leave "Root Directory" empty, set "Dockerfile Path" to ./Dockerfile.
 
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
