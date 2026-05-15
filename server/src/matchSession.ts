@@ -178,7 +178,7 @@ export function syncMatchState(player: ConnectedPlayer): boolean {
       roundIndex: match.roundIndex,
       ...opponent.liveScore,
     });
-    if (me.result && !opponent.result) {
+    if (me.result) {
       send(me, "match:spectateStart", {
         roundIndex: match.roundIndex,
         opponentName: opponent.handle.name,
@@ -281,8 +281,8 @@ export function handleRoundResult(
     ...match.players[playerIdx].liveScore,
   });
 
-  // This player just became terminal. If the opponent is still playing, open
-  // the spectator channel: replay everything opponent has done so far.
+  // This player just became terminal. Open the spectator channel with the
+  // opponent's full replay, even if the opponent also finished this tick.
   maybeOpenSpectator(match, playerIdx);
 
   if (match.players[0].result && match.players[1].result) {
@@ -317,17 +317,17 @@ export function handleCellEvents(
   }
 }
 
-// When `terminalIdx` just became terminal, see if the OTHER player is still
-// playing — if so, that other player is now the "watched" player from this
-// one's POV, so we send the watched player's backlog to the dead player.
+// When `terminalIdx` just became terminal, the other player is now the
+// "watched" player from this one's POV. Send the watched player's backlog to
+// the dead player. If both are terminal, this still gives the second finisher
+// the same final-board replay the first finisher received.
 function maybeOpenSpectator(
   match: MatchSession,
   terminalIdx: number,
 ): void {
-  const watcher = match.players[terminalIdx];        // now dead, wants to watch
-  const watched = match.players[1 - terminalIdx];    // still alive, being watched
-  if (watched.result) return;                        // both terminal — no spectate
-  if (watched.spectatorOpen) return;                 // already streaming
+  const watcher = match.players[terminalIdx];
+  const watched = match.players[1 - terminalIdx];
+  if (watched.spectatorOpen) return;
 
   watched.spectatorOpen = true;
   send(watcher, "match:spectateStart", {

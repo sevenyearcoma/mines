@@ -147,7 +147,8 @@ export const useMatchStore = create<MatchStore>((set) => ({
           roundWinners,
         },
         lastRoundEnd: p,
-        // The round is fully over — drop spectator overlay and snapshot.
+        // The round is fully over — unmount the board and drop spectator state.
+        currentRound: null,
         spectating: null,
         ownDeadSnapshot: null,
       };
@@ -158,6 +159,9 @@ export const useMatchStore = create<MatchStore>((set) => ({
       if (!state.snapshot) return { status: "complete" };
       return {
         status: "complete",
+        currentRound: null,
+        spectating: null,
+        ownDeadSnapshot: null,
         snapshot: {
           ...state.snapshot,
           roundsWon: p.roundsWon,

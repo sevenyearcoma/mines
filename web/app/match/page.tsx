@@ -200,7 +200,9 @@ function MatchPageInner() {
           )}
         {(status === "in_match" || status === "complete") &&
           snapshot &&
-          !currentRound && (
+          !currentRound &&
+          !lastRoundEnd &&
+          status !== "complete" && (
             <Centered>
               <p style={{ color: "var(--ink-mute)" }}>waiting for round…</p>
             </Centered>

@@ -220,6 +220,7 @@ export default class BoardScene extends Phaser.Scene {
       this.planted = true;
       const res = engineReveal(this.board, r, c);
       this.opens = res.revealed.length;
+      this.emitCellEvents(this.toRevealEvents(res.revealed));
       // Stagger the open by BFS distance so the centre "blooms" outward —
       // sells the daily as a curated starting position.
       for (const rev of res.revealed) {
@@ -683,7 +684,16 @@ export default class BoardScene extends Phaser.Scene {
     this.emitCellEvents(events);
 
     if (this.lives <= 0) {
-      revealAllMines(this.board);
+      const revealedMines = revealAllMines(this.board);
+      this.emitCellEvents(
+        revealedMines.map(({ r, c }) => ({
+          kind: "reveal",
+          r,
+          c,
+          adj: 0,
+          mine: true,
+        })),
+      );
       const hints = deducibleSafe(this.board);
       this.renderAll(hints, boom);
       this.cameras.main.shake(650, 0.012);
