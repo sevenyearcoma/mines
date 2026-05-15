@@ -1,0 +1,13 @@
+.env*
+!.env.example
+
+node_modules
+.next
+.vercel
+out
+build
+
+*.log
+*.tsbuildinfo
+posthog-setup-report.md
+iloveimg-compressed.zip
