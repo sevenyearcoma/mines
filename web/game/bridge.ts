@@ -7,6 +7,7 @@ import type {
   ScoreBreakdown,
 } from "@/lib/engine";
 import type { CellEvent } from "@/lib/multiplayer/protocol";
+import type { SoloProgressSnapshot } from "@/lib/solo/progress";
 
 // Snapshot of the *own* board at the moment of death, surfaced to React for
 // the side mini-board.
@@ -55,7 +56,7 @@ export type GameOverPayload = {
 type Events = {
   // Phaser -> React (legacy casual)
   "stats:update": GameStats;
-  "game:start": { difficulty: Difficulty; seed: number };
+  "game:start": { difficulty: Difficulty; seed: number; restored?: boolean };
   "game:reset": void;
   "game:over": GameOverPayload;
 
@@ -69,6 +70,8 @@ type Events = {
   "cells:events": CellEvent[];
   // Snapshot of own board at the moment of death — drives the side mini-board.
   "board:snapshot": BoardSnapshot;
+  "progress:snapshot": SoloProgressSnapshot;
+  "progress:clear": { difficulty: Difficulty };
 
   // sound triggers (Phaser -> SoundDirector)
   "sound:reveal": {
@@ -92,6 +95,8 @@ type Events = {
   "cmd:reset": void;
   "cmd:setDifficulty": Difficulty;
   "cmd:loadRound": RoundConfig;
+  "cmd:loadProgress": SoloProgressSnapshot;
+  "solo:difficultyRequested": Difficulty;
   "cmd:setMuted": boolean;
   "cmd:setVolume": number;
   // Switch the running scene into spectator mode: clears local board, freezes

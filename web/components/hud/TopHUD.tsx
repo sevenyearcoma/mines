@@ -58,7 +58,7 @@ export function TopHUD({ stats }: { stats: GameStats }) {
         {(Object.keys(DIFFS) as Difficulty[]).map((k) => (
           <button
             key={k}
-            onClick={() => bridge.emit("cmd:setDifficulty", k)}
+            onClick={() => bridge.emit("solo:difficultyRequested", k)}
             className="mono upper"
             style={{
               fontSize: 10,

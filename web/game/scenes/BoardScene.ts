@@ -26,6 +26,11 @@ import {
   type ScoreState,
 } from "@/lib/engine";
 import type { CellEvent } from "@/lib/multiplayer/protocol";
+import {
+  isSoloProgressSnapshot,
+  SOLO_PROGRESS_VERSION,
+  type SoloProgressSnapshot,
+} from "@/lib/solo/progress";
 import { bridge, type BoardSnapshot, type GameStats } from "../bridge";
 import { NUM_COLORS, TILE_COLORS, cellSize as cellSizeFor } from "../config";
 import { SoundDirector } from "../audio/SoundDirector";
@@ -82,6 +87,8 @@ export default class BoardScene extends Phaser.Scene {
   // frozen. Remote events drive the visuals only.
   private spectator = false;
   private spectatorName = "";
+  private pendingProgress: SoloProgressSnapshot | null = null;
+  private lastProgressEmitAt = 0;
   // Visual overlay shown during the post-mistake stun. Holds every transient
   // object so a round reset / scene shutdown can rip them out cleanly.
   private stunFx: {
@@ -95,8 +102,15 @@ export default class BoardScene extends Phaser.Scene {
     super({ key: "BoardScene" });
   }
 
-  init(data: { round?: RoundConfig; difficulty?: Difficulty }) {
-    if (data?.round) {
+  init(data: {
+    round?: RoundConfig;
+    difficulty?: Difficulty;
+    progress?: SoloProgressSnapshot;
+  }) {
+    if (data?.progress && isSoloProgressSnapshot(data.progress)) {
+      this.pendingProgress = data.progress;
+      this.round = data.progress.round;
+    } else if (data?.round) {
       this.round = data.round;
     } else if (data?.difficulty) {
       this.round = roundConfigFromDifficulty(data.difficulty);
@@ -133,6 +147,7 @@ export default class BoardScene extends Phaser.Scene {
     bridge.on("cmd:reset", this.resetBoard);
     bridge.on("cmd:setDifficulty", this.changeDifficulty);
     bridge.on("cmd:loadRound", this.loadRound);
+    bridge.on("cmd:loadProgress", this.loadProgress);
     bridge.on("cmd:enterSpectator", this.enterSpectator);
     bridge.on("cmd:applyRemoteEvents", this.applyRemoteEvents);
 
@@ -153,6 +168,7 @@ export default class BoardScene extends Phaser.Scene {
       bridge.off("cmd:reset", this.resetBoard);
       bridge.off("cmd:setDifficulty", this.changeDifficulty);
       bridge.off("cmd:loadRound", this.loadRound);
+      bridge.off("cmd:loadProgress", this.loadProgress);
       bridge.off("cmd:enterSpectator", this.enterSpectator);
       bridge.off("cmd:applyRemoteEvents", this.applyRemoteEvents);
       this.statsTimer?.remove();
@@ -164,6 +180,12 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   private setupBoard() {
+    const progress =
+      this.pendingProgress &&
+      isSoloProgressSnapshot(this.pendingProgress, this.round.difficulty)
+        ? this.pendingProgress
+        : null;
+    this.pendingProgress = null;
     this.rows = this.round.rows;
     this.cols = this.round.cols;
     this.mines = this.round.mines;
@@ -188,6 +210,7 @@ export default class BoardScene extends Phaser.Scene {
     this.hoverCell = null;
     this.spectator = false;
     this.spectatorName = "";
+    this.lastProgressEmitAt = 0;
     this.clearStunFx();
 
     // destroy any previous tile visuals
@@ -208,13 +231,18 @@ export default class BoardScene extends Phaser.Scene {
       bridge.emit("game:start", {
         difficulty: this.round.difficulty ?? "intermediate",
         seed: this.seed,
+        restored: progress !== null,
       });
+    }
+
+    if (progress) {
+      this.restoreProgress(progress);
     }
 
     // Pre-planted rounds place mines deterministically and open the anchor
     // cell so every player sees the same starting position. Match clocks start
     // on board load; daily clocks start on the first real interaction.
-    if (this.round.prePlant) {
+    if (!progress && this.round.prePlant) {
       const { r, c } = this.round.prePlant;
       plant(this.board, this.mines, this.seed, r, c);
       this.planted = true;
@@ -232,6 +260,7 @@ export default class BoardScene extends Phaser.Scene {
     }
 
     this.emitStats();
+    this.emitProgress(true);
   }
 
   private resetBoard = () => {
@@ -273,6 +302,17 @@ export default class BoardScene extends Phaser.Scene {
     // Streak is a casual concept; match rounds are sovereign.
     this.streak = 0;
     this.streakBest = 0;
+    this.setupBoard();
+    this.layout();
+    this.emitStats();
+  };
+
+  private loadProgress = (progress: SoloProgressSnapshot) => {
+    if (!this.input?.manager) return;
+    if (!isSoloProgressSnapshot(progress)) return;
+    if (progress.round.mode !== "casual") return;
+    this.pendingProgress = progress;
+    this.round = progress.round;
     this.setupBoard();
     this.layout();
     this.emitStats();
@@ -587,6 +627,7 @@ export default class BoardScene extends Phaser.Scene {
     }
 
     this.emitStats();
+    this.emitProgress(true);
   }
 
   private tryFlag(r: number, c: number) {
@@ -619,6 +660,7 @@ export default class BoardScene extends Phaser.Scene {
     bridge.emit("sound:flag", { on: now });
     this.emitCellEvents([{ kind: "flag", r, c, on: now }]);
     this.emitStats();
+    this.emitProgress(true);
   }
 
   private tryChord(r: number, c: number) {
@@ -666,6 +708,7 @@ export default class BoardScene extends Phaser.Scene {
       return;
     }
     this.emitStats();
+    this.emitProgress(true);
   }
 
   private handleMistake(
@@ -721,6 +764,7 @@ export default class BoardScene extends Phaser.Scene {
     }
 
     this.emitStats();
+    this.emitProgress(true);
   }
 
   private applyRevealVisual(r: number, c: number) {
@@ -1322,6 +1366,11 @@ export default class BoardScene extends Phaser.Scene {
     // Solo flows (casual + daily) share this overlay/recorder path. Match
     // mode uses round:end → MatchHUD instead.
     if (this.round.mode === "casual" || this.round.mode === "daily") {
+      if (this.round.mode === "casual") {
+        bridge.emit("progress:clear", {
+          difficulty: this.round.difficulty ?? "intermediate",
+        });
+      }
       bridge.emit("game:over", {
         won: this.won,
         elapsedMs,
@@ -1351,6 +1400,7 @@ export default class BoardScene extends Phaser.Scene {
       }
     }
     this.emitStats();
+    this.emitProgress(false);
   }
 
   private emitStats() {
@@ -1462,6 +1512,144 @@ export default class BoardScene extends Phaser.Scene {
       }
     }
     return { rows: this.rows, cols: this.cols, cells, boom };
+  }
+
+  private restoreProgress(progress: SoloProgressSnapshot): void {
+    if (
+      progress.board.rows !== this.rows ||
+      progress.board.cols !== this.cols ||
+      progress.board.cells.length !== this.rows * this.cols
+    ) {
+      return;
+    }
+
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const saved = progress.board.cells[r * this.cols + c];
+        this.board[r][c] = {
+          r,
+          c,
+          mine: saved.m,
+          adj: saved.a,
+          revealed: saved.r,
+          flagged: saved.f,
+        };
+      }
+    }
+
+    this.planted = progress.planted;
+    this.startedAt =
+      progress.elapsedMs === null ? null : Date.now() - progress.elapsedMs;
+    this.endedAt = progress.gameOver ? Date.now() : null;
+    this.gameOver = progress.gameOver;
+    this.won = progress.won;
+    this.opens = progress.opens;
+    this.clicks = progress.clicks;
+    this.chains = progress.chains;
+    this.lives = progress.lives;
+    this.stunnedUntilMs = progress.stunnedUntilMs;
+    this.streak = progress.streak;
+    this.streakBest = progress.streakBest;
+    this.actions = progress.actions.slice();
+    this.scoreState = { ...newScoreState(), ...progress.scoreState };
+
+    this.renderRestoredBoard();
+  }
+
+  private renderRestoredBoard(): void {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.board[r][c];
+        const t = this.tiles[r]?.[c];
+        if (!t) continue;
+
+        t.isRevealed = false;
+        t.isFlagged = false;
+        t.reveal.setVisible(false);
+        t.number.setVisible(false);
+        t.bomb.setVisible(false);
+        t.flag.setVisible(false);
+        t.hint.setVisible(false);
+        t.cover.setVisible(true);
+        this.drawCover(t.cover, this.size, false);
+
+        if (cell.revealed) {
+          t.isRevealed = true;
+          this.drawRevealed(t.reveal, this.size);
+          t.reveal.setVisible(true);
+          t.cover.setVisible(false);
+          if (cell.mine) {
+            this.drawBomb(t.bomb, this.size, false);
+            t.bomb.setVisible(true);
+          } else if (cell.adj > 0) {
+            t.number.setText(String(cell.adj));
+            t.number.setColor(NUM_COLORS[cell.adj] ?? "#fff");
+            t.number.setVisible(true);
+          }
+        } else if (cell.flagged) {
+          t.isFlagged = true;
+          this.drawFlag(t.flag, this.size);
+          t.flag.setVisible(true);
+          t.cover.setVisible(false);
+        }
+      }
+    }
+  }
+
+  private buildProgressSnapshot(): SoloProgressSnapshot | null {
+    if (this.round.mode !== "casual") return null;
+    const difficulty = this.round.difficulty;
+    if (!difficulty) return null;
+
+    const elapsedMs =
+      this.startedAt === null
+        ? null
+        : this.gameOver && this.endedAt
+        ? this.endedAt - this.startedAt
+        : Date.now() - this.startedAt;
+
+    return {
+      version: SOLO_PROGRESS_VERSION,
+      difficulty,
+      round: this.round,
+      board: {
+        rows: this.rows,
+        cols: this.cols,
+        cells: this.board.flatMap((row) =>
+          row.map((cell) => ({
+            m: cell.mine,
+            a: cell.adj,
+            r: cell.revealed,
+            f: cell.flagged,
+          })),
+        ),
+      },
+      planted: this.planted,
+      elapsedMs,
+      gameOver: this.gameOver,
+      won: this.won,
+      opens: this.opens,
+      clicks: this.clicks,
+      chains: this.chains,
+      lives: this.lives,
+      stunnedUntilMs: this.stunnedUntilMs,
+      streak: this.streak,
+      streakBest: this.streakBest,
+      actions: this.actions.slice(),
+      scoreState: { ...this.scoreState },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  private emitProgress(force = false): void {
+    if (this.round.mode !== "casual") return;
+    if (this.spectator || this.gameOver) return;
+    const now = Date.now();
+    if (!force && now - this.lastProgressEmitAt < 5000) return;
+    const snapshot = this.buildProgressSnapshot();
+    if (!snapshot) return;
+    this.lastProgressEmitAt = now;
+    bridge.emit("progress:snapshot", snapshot);
   }
 
   // -------------------------- spectator rendering --------------------------

@@ -33,8 +33,12 @@ export function GameRecorder({
     const onStats = (s: GameStats) => {
       statsRef.current = s;
     };
-    const onStart = (p: { difficulty: Difficulty; seed: number }) => {
-      capture("solo_game_started", { difficulty: p.difficulty, seed: p.seed });
+    const onStart = (p: { difficulty: Difficulty; seed: number; restored?: boolean }) => {
+      capture("solo_game_started", {
+        difficulty: p.difficulty,
+        seed: p.seed,
+        restored: p.restored ?? false,
+      });
       actionsRef.current = null;
       onSaveStateChange?.({ kind: "idle" });
     };

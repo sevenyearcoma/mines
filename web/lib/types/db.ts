@@ -34,6 +34,13 @@ export type Game = {
 
 export type NewGame = Omit<Game, "id" | "played_at">;
 
+export type SoloProgress = {
+  user_id: string;
+  difficulty: Difficulty;
+  state: unknown;
+  updated_at: string;
+};
+
 export type MatchRoundDemo = {
   id: string;
   match_id: string;

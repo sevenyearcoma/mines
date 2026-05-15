@@ -5,11 +5,14 @@ import {
   roundConfigFromDifficulty,
   type RoundConfig,
 } from "@/lib/engine";
+import type { SoloProgressSnapshot } from "@/lib/solo/progress";
 
 export default function PhaserGame({
   initialRound,
+  initialProgress,
 }: {
   initialRound?: RoundConfig;
+  initialProgress?: SoloProgressSnapshot | null;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   // We only call .scene and .destroy on the game from the cleanup path;
@@ -33,7 +36,9 @@ export default function PhaserGame({
       if (cancelled || !hostRef.current) return;
 
       const round =
-        initialRound ?? roundConfigFromDifficulty("intermediate");
+        initialProgress?.round ??
+        initialRound ??
+        roundConfigFromDifficulty("intermediate");
 
       const game = new Phaser.Game({
         type: Phaser.AUTO,
@@ -51,7 +56,7 @@ export default function PhaserGame({
       });
 
       gameRef.current = game;
-      game.scene.start("BootScene", { round });
+      game.scene.start("BootScene", { round, progress: initialProgress ?? undefined });
     })();
 
     return () => {
