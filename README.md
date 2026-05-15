@@ -1,210 +1,202 @@
 # MINES
 
-> Minesweeper, but every click feels expensive.
+> Сапер, в котором каждый клик ощущается дорогим.
 
-Forty-year-old game. New table. Same rules, raised stakes.
+Сорокалетняя игра. Новый стол. Те же правила, выше ставки.
 
-We took the most overlooked grid in computing history and rebuilt it as a
-competitive arena — shared seeds, real-time PvP, score multipliers that reward
-nerve over patience, an AI coach that reads your mistakes back to you, and a
-casino-floor presentation that respects the fact you're about to risk a streak
-on a single click. The game wasn't broken. The packaging was.
+Мы взяли одну из самых недооцененных сеток в истории компьютеров и собрали из
+нее соревновательную арену: общие сиды, real-time PvP, множители очков за
+смелость, а не за терпение, AI-тренер, который показывает ошибки в replay, и
+казино-подача для игры, где один клик может стоить серии. Сама игра не была
+сломана. Сломана была упаковка.
 
-This is the showcase: a deployable, full-stack build that proves Minesweeper
-still has teeth when you stop treating it like a Windows accessory.
+Это showcase-сборка: deployable full-stack проект, который доказывает, что
+Minesweeper все еще может быть острым, если перестать относиться к нему как к
+аксессуару из Windows.
 
 ## Live demo
 
-Review the deployed build here:
+Публичная версия проекта:
 
 **https://mines.halfyy.tech**
 
-That is the canonical production domain for this project. Use it for reviewer
-links, Supabase auth redirect URLs, and GitHub OAuth callback testing.
+Это канонический production-домен проекта. Используйте его для ревью-ссылок,
+Supabase auth redirect URLs и проверки GitHub OAuth.
 
 ---
 
-## The bet
+## Ставка
 
-Minesweeper has been dormant for two decades not because it's a bad game — it's
-because nobody gave it stakes. Solitaire has Microsoft Hearts tournaments.
-Sudoku has The New York Times. Tetris has the entire competitive speedrunning
-ecosystem. Minesweeper got bundled with Win95 and forgotten.
+Minesweeper не спал двадцать лет потому, что это плохая игра. Он спал потому,
+что ему никто не дал ставок. У Solitaire есть турниры Microsoft Hearts. У Sudoku
+есть The New York Times. У Tetris есть целая speedrunning-сцена. Minesweeper
+положили в Win95 и забыли.
 
-**We're making Minesweeper viable in 2026.** Not by changing the rules —
-changing the *frame*. A 30-second solo sprint is a warm-up. A 16×16 shared-seed
-duel against another human is a story. A daily one-life board everyone in the
-world is playing right now is a ritual. A demo replay where an AI walks you
-through the pattern you missed is a coaching session.
+**Мы делаем Minesweeper актуальным в 2026 году.** Не меняя правила, а меняя
+рамку. 30-секундный solo sprint - разминка. Дуэль 16x16 с общим сидом против
+живого игрока - история. Daily board с одной жизнью, который сегодня проходит
+весь мир, - ритуал. Replay, где AI разбирает пропущенный паттерн, - тренировка.
 
-Same game your dad played at his office desk. Different reason to keep playing.
+Та же игра, в которую ваш отец играл за офисным столом. Другая причина
+возвращаться.
 
 ---
 
-## What's in the box
+## Что внутри
 
-### Three modes, one identity
+### Три режима, одна идентичность
 
-- **Solo sprint** — Casual intermediate board, multi-life mode, instant
-  restart. The on-ramp. New visitors hit "Start playing →" on the home page and
-  are in a board within one click, no signup required.
-- **Daily challenge** — One seed, one life, every player on the planet, one UTC
-  day. Pure-hardcore framing. Locked after completion until tomorrow rolls
-  over. Backed by a global leaderboard with regional filtering.
-- **Ranked 1v1** — Best-of-five. Same seed for both players. Real-time
-  spectator view of your opponent's board once you're dead. Score-driven
-  rounds: speed, accuracy, and combo decide who closes the match. Invite-link
-  duels, friend challenges, and a quick-match queue all share the same socket
-  pipe.
+- **Solo sprint** - casual intermediate board, multi-life режим, мгновенный
+  restart. Это входная точка: новый посетитель нажимает "Start playing ->" на
+  главной и попадает в доску за один клик, без регистрации.
+- **Daily challenge** - один seed, одна жизнь, один UTC-день и общий board для
+  всех игроков. После прохождения locked до следующего дня. Поддерживается
+  global leaderboard с региональными фильтрами.
+- **Ranked 1v1** - матч до трех побед. Одинаковый seed для обоих игроков.
+  После смерти игрок видит spectator-view доски соперника. Раунды решаются
+  score-системой: скорость, точность и combo определяют победителя. Invite-link
+  дуэли, friend challenges и quick-match queue используют один Socket.io server.
 
-### Engineering — Phaser × React
+### Инженерия - Phaser x React
 
-The board itself is a **Phaser 4** scene. Tiles are real game objects with
-tweens, particles, and a stun-overlay system for the mistake-penalty window.
-The HUD, overlays, modals, and matchmaking UI are all **React 19 / Next.js 16
-App Router**. The two halves talk through a single typed event bus (`mitt`)
-that lives at `web/game/bridge.ts` — every domain event flows through it, so
-the game engine never reaches into React and React never reaches into Phaser.
-That seam is what made everything else possible: replays, scoring, sound
-design, and the AI coach all subscribe to the same stream.
+Сама доска - это **Phaser 4** scene. Tiles являются настоящими game objects с
+tweens, particles и stun-overlay на время штрафа за ошибку.
 
-The Phaser canvas is transparent. The casino dealer (MINOS) sits behind the
-board at 50% opacity and reacts to gameplay events — leans in on every combo
-click, holds his head for the entire 3-second stun window after you hit a
-mine, pops a foiled "COMBO · 6 chain" caption as your multiplier climbs. The
-hype is not decoration; it's a continuous read on how you're doing.
+HUD, overlays, modals и matchmaking UI сделаны на **React 19 / Next.js 16 App
+Router**. Две части общаются через один типизированный event bus (`mitt`) в
+`web/game/bridge.ts`: все domain events идут через него, поэтому game engine не
+лезет в React, а React не лезет в Phaser. Это позволило собрать replay, scoring,
+sound design и AI coach поверх одного потока событий.
 
-### Scoring that rewards intent
+Phaser canvas прозрачный. Casino dealer MINOS сидит за доской на 50% opacity и
+реагирует на gameplay: наклоняется на combo-click, держится за голову все 3
+секунды stun window после mine, показывает caption вроде "COMBO - 6 chain",
+когда растет multiplier. Это не декор, а постоянный индикатор состояния игрока.
 
-Every reveal is scored: a base value for the cells you uncovered, a combo
-multiplier that compounds while you keep moving without hesitating, a speed
-bonus for cascade-cleared regions, and an accuracy multiplier that climbs as
-you stack consecutive non-guess moves. Mistakes don't just lose a life — they
-break the combo, break the speed bonus, and freeze your input for three
-seconds while a stun overlay plays out. The HUD readouts are seven-segment
-casino displays with tabular numerics and glow tints so you can read your
-state at a glance mid-cascade.
+### Score-система, которая награждает намерение
 
-The full breakdown — base / combo / speed / control / penalty / peak
-multipliers — is surfaced at round end in PvP and in the deep-cuts analytics
-on every player's profile.
+Каждый reveal оценивается: base value за открытые cells, combo multiplier за
+движение без пауз, speed bonus за cascade-cleared regions и accuracy multiplier
+за серию non-guess moves. Ошибка не просто отнимает жизнь: она сбивает combo,
+ломает speed bonus и замораживает ввод на три секунды, пока играет stun overlay.
+HUD использует seven-segment casino displays с tabular numerics и glow tint,
+чтобы состояние читалось прямо во время cascade.
 
-### Auth flow that respects first-timers
+Полный breakdown - base / combo / speed / control / penalty / peak multipliers -
+показывается в конце PvP-раунда и в deep-cuts аналитике профиля.
 
-- **One-click play.** Anonymous visitors hit "Start playing →" on the home
-  page and land in a solo board. Zero signup friction.
-- **Auto-guest.** Visiting `/match` with no account auto-creates a guest
-  identity (random adjective-noun-tag name) so multiplayer is one click from a
-  cold cache.
-- **Real accounts when ready.** Supabase auth with GitHub OAuth and
-  magic-link email. Signing in promotes the guest's session, and from that
-  point everything persists.
+### Auth flow без лишнего трения
 
-### Pro tier — gated showcase features
+- **One-click play.** Anonymous visitor нажимает "Start playing ->" и сразу
+  попадает в solo board.
+- **Auto-guest.** Если открыть `/match` без аккаунта, приложение автоматически
+  создает guest identity с случайным именем. Multiplayer доступен с холодного
+  cache за один клик.
+- **Real accounts when ready.** Supabase auth с GitHub OAuth и magic-link email.
+  После входа guest-сессия продвигается в реальный аккаунт, а прогресс начинает
+  сохраняться.
 
-A toggle in the site header flips a `localStorage`-backed Pro mode that
-gates the showpiece systems:
+### Pro tier - showcase-фичи за gate
 
-- **AI Coach** — Live pattern detection during demo playback. Identifies
-  1-2-1, 1-2-2-1, 1-1-along-wall and a half-dozen other named tactics, marks
-  anchor cells with gold halos, marks conclusion cells green (safe) or red
-  (mine), and surfaces a tip strip explaining why. Works in solo demos *and*
-  side-by-side in 1v1 match replays — analyze both players' decision trees on
-  the same scrubber.
-- **Pattern-stepping** — Step-by-pattern mode in the demo player jumps to the
-  next teachable moment instead of the next click. Turns a 90-second replay
-  into a 4-step tactical lesson.
-- **Demo replays** — Every solo run and every PvP match round is recorded
-  with full action logs. Scrub, step, slow-mo. Match demos show both
-  players' boards in parallel.
-- **Deep cuts** — Insights pulled from your action logs: win-rate by
-  difficulty, decision-speed bars, time-of-day patterns, boom-cell heatmap,
-  ranked tells. Built from the same telemetry the AI coach uses.
+Переключатель в header включает `localStorage`-backed Pro mode и открывает
+showpiece-системы:
 
-Flip the slider off and every gated feature gracefully degrades with a "Pro
-required" prompt — no orphan UI, no broken states.
+- **AI Coach** - live pattern detection во время replay. Находит 1-2-1,
+  1-2-2-1, 1-1-along-wall и другие named tactics, подсвечивает anchor cells
+  золотым, conclusion cells зеленым (safe) или красным (mine), и объясняет
+  почему. Работает в solo demos и в side-by-side 1v1 match replays.
+- **Pattern-stepping** - step-by-pattern режим в demo player прыгает к
+  следующему обучающему моменту, а не к следующему клику. 90-секундный replay
+  превращается в 4-шаговый tactical lesson.
+- **Demo replays** - каждый solo run и каждый PvP match round записывается с
+  action logs. Есть scrub, step и slow-mo. Match demos показывают доски обоих
+  игроков параллельно.
+- **Deep cuts** - аналитика по action logs: win-rate по difficulty, decision
+  speed bars, time-of-day patterns, boom-cell heatmap, ranked tells. Построено
+  на той же telemetry, которую использует AI coach.
 
-### Multiplayer that doesn't pretend it's invincible
+Если выключить Pro slider, gated features деградируют в "Pro required" prompt:
+без мертвых экранов и broken states.
 
-The Socket.io server is a custom matchmaker on the side of the web app. It
-handles authentication (re-using Supabase JWTs *and* a guest path),
-queue/invite-link/friend-challenge flows, score-tick broadcasting, spectator
-mode after death, between-rounds pacing, and a 15-second grace window so a
-brief disconnect mid-search or mid-match doesn't drop you out.
+### Multiplayer, который не притворяется бессмертным
 
-When the server is unreachable, the lobby doesn't dead-end on a red error.
-A status card explains what happened and offers a Retry button plus
-in-lobby links to solo and daily — the modes that don't need the server.
-Buttons that *require* the server disable themselves with a tooltip until
-the connection is back.
+Socket.io server - кастомный matchmaker рядом с web app. Он отвечает за auth
+(Supabase tokens и guest path), queue / invite-link / friend-challenge flows,
+score-tick broadcasting, spectator mode после смерти, паузы между раундами и
+15-секундный grace window, чтобы краткий disconnect не выбрасывал игрока из
+поиска или матча.
+
+Если server недоступен, lobby не упирается в красную ошибку. Status card
+объясняет проблему, дает Retry button и ссылки на solo/daily - режимы, которым
+server не нужен. Кнопки, которым нужен server, disabled с tooltip до
+восстановления соединения.
 
 ### Sound + presentation
 
-- **Hybrid sound design.** Synth-generated reveal blips for latency-free
-  per-click feedback layered with sample files for the weight moments —
-  chip clatter on multi-cell cascades, "ching" on combo milestones, sub-bass
-  thump on mine explosions, fanfare bell on wins.
-- **MINOS the dealer.** A 992×992 mascot anchored to the bottom-left, half-
-  transparent, behind the content layer. Driven by a single React context —
-  pages call `useMascotPose("approve", "clean break — rack 'em again")` and
-  the rail morphs. Combos brighten and scale him in tiny increments per
-  click; mistakes flip him to the wince pose for the same 3 seconds the
-  player is stunned. He is the game's emotional state, externalized.
-- **Subtle texture pass.** Two-layer shadows, dialed-back grain, glints that
-  only fire on hover/intent. Casino feel preserved, eye strain eliminated.
+- **Hybrid sound design.** Synth reveal blips для мгновенной per-click отдачи,
+  поверх них sample files для важных моментов: chip clatter на cascades,
+  "ching" на combo milestones, sub-bass thump на mine explosions, fanfare bell
+  на wins.
+- **MINOS the dealer.** 992x992 mascot внизу слева, полупрозрачный, за content
+  layer. Управляется одним React context: страницы вызывают
+  `useMascotPose("approve", "clean break - rack 'em again")`, а rail меняет
+  pose. Combo слегка подсвечивает и увеличивает его; mistake переводит в wince
+  pose на те же 3 секунды, пока игрок stunned.
+- **Subtle texture pass.** Два слоя shadows, приглушенный grain, glints только
+  на hover/intent. Casino feel остается, eye strain уходит.
 
 ---
 
 ## Stack
 
-| Layer            | Choice                      | Why                                                                  |
-|------------------|----------------------------|----------------------------------------------------------------------|
-| App framework    | Next.js 16 (App Router)     | RSC for fast initial loads, client islands where they're needed.    |
-| UI               | React 19, TypeScript        | Server components for data, client components for the action.       |
-| Game engine      | Phaser 4                    | Canvas-backed, transparent, plays nice with React via the bridge.   |
-| Auth + DB        | Supabase                    | RLS for free, JWTs reusable in the socket server, magic-link UX.    |
-| Real-time        | Socket.io 4                 | Battle-tested, namespace-free, reconnection semantics we trust.     |
-| Analytics        | PostHog                     | Self-hostable, product analytics that doesn't surveil players.       |
-| Hosting (web)    | Vercel                      | Best-in-class for Next.js. Zero config.                              |
-| Hosting (socket) | Railway                     | Long-lived processes. Vercel functions can't hold WebSockets.       |
+| Layer | Choice | Почему |
+| --- | --- | --- |
+| App framework | Next.js 16 (App Router) | RSC для быстрых initial loads, client islands там, где нужен action. |
+| UI | React 19, TypeScript | Server components для data, client components для gameplay. |
+| Game engine | Phaser 4 | Canvas-backed engine, хорошо живет рядом с React через bridge. |
+| Auth + DB | Supabase | RLS, GitHub OAuth, magic links, anon key для клиента и server auth. |
+| Real-time | Socket.io 4 | Проверенная reconnect-модель и простой protocol для PvP. |
+| Analytics | PostHog | Optional product analytics без обязательного vendor lock-in. |
+| Hosting (web) | Vercel | Лучший путь для Next.js. |
+| Hosting (socket) | Railway | Long-lived process; Vercel functions не держат WebSocket server. |
 
-Everything is TypeScript end-to-end. Shared engine + protocol types live in
-`web/lib/` and are imported directly by the server build (the repo-root
-Dockerfile pulls both into the image).
+Все написано на TypeScript. Общие engine + protocol types лежат в `web/lib/` и
+импортируются server build напрямую. Repo-root `Dockerfile` копирует и
+`server/`, и нужные slices из `web/lib/`.
 
 ---
 
-## Local development
+## Локальный запуск
 
 Prerequisites:
 
 - Node.js 22+
-- A Supabase project with the SQL in `supabase/migrations/` applied
-- Supabase project URL + anon key from Project Settings -> API
+- Supabase project с примененными SQL-файлами из `supabase/migrations/`
+- Supabase project URL и anon key из Project Settings -> API
 
-For a new Supabase project, open the Supabase SQL Editor and run the migration
-files in `supabase/migrations/` in filename order (`0001_...` through
-`0008_...`). They create the tables, triggers, foreign keys, and RLS policies
-used by auth, leaderboards, daily completions, demos, and friends.
+Для нового Supabase project откройте SQL Editor и выполните migration files из
+`supabase/migrations/` по порядку имен (`0001_...` through `0008_...`). Они
+создают tables, triggers, foreign keys и RLS policies для auth, leaderboards,
+daily completions, demos и friends.
 
 ```bash
 # one-time
-npm run install:all   # installs root, web, and server deps
+npm run install:all   # устанавливает зависимости root, web и server
 
-# every day
-npm run dev           # starts web (3000) + server (3001) together
+# каждый день
+npm run dev           # запускает web (3000) + server (3001)
 ```
 
-The combined dev script lives in the repo-root `package.json` and uses
-`concurrently` to launch both. Color-prefixed output: `WEB` (yellow), `SRV`
-(magenta). Stop with Ctrl-C and both processes exit cleanly.
+Combined dev script находится в repo-root `package.json` и использует
+`concurrently`. Output разделен prefix-ами: `WEB` (yellow), `SRV` (magenta).
+Остановка через Ctrl-C завершает оба процесса.
 
 ### Environment files
 
-- `web/.env.local` — copy from `web/.env.example`
-- `server/.env`    — copy from `server/.env.example`
+- `web/.env.local` - скопируйте из `web/.env.example`
+- `server/.env` - скопируйте из `server/.env.example`
 
-Minimum local values:
+Минимальные local values:
 
 ```bash
 # web/.env.local
@@ -220,146 +212,150 @@ SUPABASE_ANON_KEY=YOUR_ANON_KEY
 CORS_ORIGIN=http://localhost:3000
 ```
 
-No Supabase service-role key or JWT secret is required. The socket server
-validates real users through Supabase Auth and also supports guest multiplayer.
+Supabase service-role key и JWT secret не нужны. Socket server валидирует
+реальных пользователей через Supabase Auth и также поддерживает guest
+multiplayer.
 
-### Type-checking everything
+### Type-checking
 
 ```bash
-npm run typecheck   # runs tsc --noEmit in both web/ and server/
+npm run typecheck   # запускает tsc --noEmit в web/ и server/
 ```
 
 ---
 
-## Deploying to Railway + Vercel
+## Deploy на Railway + Vercel
 
 ### 1. Socket server -> Railway
 
-The Socket.io server cannot run on Vercel because serverless functions do not
-hold WebSocket connections. Deploy Railway first so the web app can build with a
-real `NEXT_PUBLIC_SOCKET_URL`.
+Socket.io server нельзя хостить на Vercel как serverless function: ему нужен
+long-lived process. Railway deploy идет первым, чтобы web app мог билдиться с
+реальным `NEXT_PUBLIC_SOCKET_URL`.
 
 1. [railway.app](https://railway.app) -> New Project -> Deploy from GitHub repo.
-2. Leave **Root Directory** blank. The repo root has a `Dockerfile` and
-   `railway.json` that build the server image, and the Docker build needs both
-   `server/` and `web/lib/`.
-3. **Variables** tab -> add:
-   - `SUPABASE_URL` -> from Supabase Project Settings -> API
-   - `SUPABASE_ANON_KEY` -> from Supabase Project Settings -> API
+2. Leave **Root Directory** blank. В repo root лежат `Dockerfile` и
+   `railway.json`; Docker build должен видеть и `server/`, и `web/lib/`.
+3. **Variables** tab -> добавьте:
+   - `SUPABASE_URL` -> Supabase Project Settings -> API
+   - `SUPABASE_ANON_KEY` -> Supabase Project Settings -> API
    - `CORS_ORIGIN` -> `https://mines.halfyy.tech`
-4. Railway injects `PORT` automatically; do not set `PORT` or `SOCKET_PORT` in
+4. Railway сам inject-ит `PORT`; не задавайте `PORT` или `SOCKET_PORT` в
    production.
-5. Once deployed, copy Railway's public URL, for example
+5. После deploy скопируйте public Railway URL, например
    `https://server-production-f06f.up.railway.app`.
 
 ### 2. Web app -> Vercel
 
-1. Create a new Vercel project pointing at this GitHub repo.
-2. **Project Settings -> General -> Root Directory**: set to `web/`.
-3. Framework preset: **Next.js** (auto-detected).
+1. Создайте Vercel project из этого GitHub repo.
+2. **Project Settings -> General -> Root Directory**: `web/`.
+3. Framework preset: **Next.js**.
 4. **Environment Variables** (Production + Preview):
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `NEXT_PUBLIC_SOCKET_URL` -> the Railway public URL from step 1
+   - `NEXT_PUBLIC_SOCKET_URL` -> public Railway URL из шага 1
    - `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` (optional)
-   - `NEXT_PUBLIC_POSTHOG_ENABLED=false` unless analytics are configured
-5. Click **Deploy**.
+   - `NEXT_PUBLIC_POSTHOG_ENABLED=false`, если analytics не настроен
+5. Нажмите **Deploy**.
 
 ### 3. Supabase auth callback
 
-In the Supabase dashboard:
+В Supabase dashboard:
 
 - **Authentication -> URL Configuration -> Site URL**:
   `https://mines.halfyy.tech`
 - **Redirect URLs**:
   - `https://mines.halfyy.tech/auth/callback`
-  - `http://localhost:3000/auth/callback` for local development
+  - `http://localhost:3000/auth/callback` для local development
 
-OAuth and magic-link flows now round-trip through production.
+После этого OAuth и magic links возвращают пользователя в production или local
+app корректно.
 
 ### 4. Verify
 
-- Visit `https://mines.halfyy.tech` -> home loads, "Start playing ->" jumps into
-  a solo board.
-- Visit `/match` from two browser windows -> both connect to Railway's socket,
-  matchmaking pairs them up.
-- If `/match` shows the "PvP server unreachable" card, the Railway service is
-  cold-starting or down. Click **Retry connection** once it comes back up.
+- Откройте `https://mines.halfyy.tech`: home page грузится, "Start playing ->"
+  открывает solo board.
+- Откройте `/match` в двух browser windows: оба клиента подключаются к Railway
+  socket, matchmaking должен создать пару.
+- Если `/match` показывает "PvP server unreachable", Railway service может
+  cold-start-иться или быть down. Подождите и нажмите **Retry connection**.
 
-Cost note: Vercel Hobby and Supabase Free are enough for showcase traffic.
-Railway's free allowance may cover light demos, but budget about `$5/mo` for
-Railway Hobby if you want predictable always-on socket uptime.
+Cost note: Vercel Hobby и Supabase Free достаточно для showcase traffic.
+Railway free allowance может хватить для легких demo, но для predictable
+always-on socket uptime лучше закладывать около `$5/mo` за Railway Hobby.
 
 ---
 
 ## Branding
 
-The tab icon is `web/app/icon.png`, sourced from `web/assets/logo.png`. Next.js
-App Router wires `app/icon.png` automatically as the favicon. Hard-refresh to
-see icon changes after deploy.
+Tab icon - это `web/app/icon.png`, sourced from `web/assets/logo.png`. Next.js
+App Router автоматически wire-ит `app/icon.png` как favicon. После deploy
+сделайте hard refresh, чтобы увидеть изменения icon.
 
 ---
 
-## Project layout
+## Структура проекта
 
-```
+```text
 mines/
-├── package.json            # Root: dev orchestration (concurrently)
-├── Dockerfile              # Builds the server image for Railway
-├── railway.json            # Railway build config
-├── server/                 # Socket.io matchmaking + match session relay
-│   ├── src/
-│   │   ├── index.ts        # Connection handler, queue, challenges, invites
-│   │   ├── matchmaking.ts  # FIFO queue with stale-socket eviction + logs
-│   │   ├── matchSession.ts # Round/match lifecycle, scoring rebroadcasting
-│   │   └── auth.ts         # Supabase JWT validation + guest path
-│   └── package.json
-└── web/                    # Next.js app — UI + Phaser game
-    ├── app/                # App Router routes
-    │   ├── page.tsx        # Home + leaderboard + primary CTA
-    │   ├── play/           # Solo
-    │   ├── daily/          # Daily challenge
-    │   ├── match/          # PvP lobby + active match
-    │   ├── profile/        # Player profile + deep cuts
-    │   ├── leaderboard/    # Regional + global rankings
-    │   └── demo/[kind]/[id]/  # Replay scrubber for solo/daily/match
-    ├── components/
-    │   ├── mascot/         # MINOS rail + pose context
-    │   ├── multiplayer/    # Server status card
-    │   ├── pro/            # Pro toggle, gates, route gate
-    │   ├── demo/           # Player + match demo viewers, coach panels
-    │   ├── stats/          # Deep cuts: insights, heatmaps, decision speed
-    │   └── hud/            # Top HUD, side panel, result overlays
-    ├── lib/                # Shared utilities (some imported by server/)
-    │   ├── engine/         # Pure scoring, round config, types
-    │   ├── coach/          # Pattern detection — used in demo viewers
-    │   ├── multiplayer/    # Socket client, protocol, useMultiplayerMatch
-    │   ├── leaderboard/    # Hooks + country resolution
-    │   ├── stats/          # Deep-cuts computation from action logs
-    │   ├── store/          # Zustand match store
-    │   ├── demo/           # Demo serialization + playback frames
-    │   └── supabase/       # Browser + server clients
-    ├── game/               # Phaser scenes + audio + bridge
-    │   ├── bridge.ts       # Typed mitt event bus — the React↔Phaser seam
-    │   ├── PhaserGame.tsx  # Mount/teardown wrapper
-    │   ├── scenes/         # Boot, Preload, Board
-    │   └── audio/          # SoundDirector + sample list
-    ├── assets/             # Copied to public/ at prebuild
-    └── package.json
+|-- package.json            # Root: dev orchestration через concurrently
+|-- Dockerfile              # Server image для Railway
+|-- railway.json            # Railway build config
+|-- supabase/
+|   `-- migrations/         # SQL schema, triggers и RLS policies
+|-- server/                 # Socket.io matchmaking + match session relay
+|   |-- src/
+|   |   |-- index.ts        # Connections, queue, challenges, invites
+|   |   |-- matchmaking.ts  # FIFO queue, stale-socket eviction, logs
+|   |   |-- matchSession.ts # Round/match lifecycle, scoring rebroadcasting
+|   |   `-- auth.ts         # Supabase token validation + guest path
+|   `-- package.json
+`-- web/                    # Next.js app, UI + Phaser game
+    |-- app/                # App Router routes
+    |   |-- page.tsx        # Home + leaderboard + primary CTA
+    |   |-- play/           # Solo
+    |   |-- daily/          # Daily challenge
+    |   |-- match/          # PvP lobby + active match
+    |   |-- profile/        # Player profile + deep cuts
+    |   |-- leaderboard/    # Regional + global rankings
+    |   `-- demo/[kind]/[id]/ # Replay scrubber for solo/daily/match
+    |-- components/
+    |   |-- mascot/         # MINOS rail + pose context
+    |   |-- multiplayer/    # Server status card
+    |   |-- pro/            # Pro toggle, gates, route gate
+    |   |-- demo/           # Player + match demo viewers, coach panels
+    |   |-- stats/          # Deep cuts: insights, heatmaps, decision speed
+    |   `-- hud/            # Top HUD, side panel, result overlays
+    |-- lib/                # Shared utilities, часть импортируется server/
+    |   |-- engine/         # Pure scoring, round config, types
+    |   |-- coach/          # Pattern detection для demo viewers
+    |   |-- multiplayer/    # Socket client, protocol, useMultiplayerMatch
+    |   |-- leaderboard/    # Hooks + country resolution
+    |   |-- stats/          # Deep-cuts computation from action logs
+    |   |-- store/          # Zustand match store
+    |   |-- demo/           # Demo serialization + playback frames
+    |   `-- supabase/       # Browser + server clients
+    |-- game/               # Phaser scenes + audio + bridge
+    |   |-- bridge.ts       # Typed mitt event bus между React и Phaser
+    |   |-- PhaserGame.tsx  # Mount/teardown wrapper
+    |   |-- scenes/         # Boot, Preload, Board
+    |   `-- audio/          # SoundDirector + sample list
+    |-- assets/             # Source media/audio assets
+    `-- package.json
 ```
 
 ---
 
-## What's next
+## Что дальше
 
-- **Tournament mode** — bracketed multi-round elimination with seeded
-  brackets and a shared spectator stream.
-- **Ladder + ranks** — proper Elo with rank icons. The infrastructure is
-  in place; the visual layer is the next pass.
-- **Mobile** — current breakpoints work, but the mascot rail hides at
-  ≤900px viewports. A mobile-first reskin of the HUD and a touch-tuned
-  flag/reveal gesture is the obvious next milestone.
-- **Coach generality** — pattern detection covers the named tactics today.
-  Generalizing to constraint-propagation deduction is a research item.
+- **Tournament mode** - bracketed multi-round elimination с seeded brackets и
+  shared spectator stream.
+- **Ladder + ranks** - нормальный Elo и rank icons. Infrastructure уже есть,
+  следующий шаг - visual layer.
+- **Mobile** - текущие breakpoints работают, но mascot rail скрывается на
+  viewports <= 900px. Нужен mobile-first HUD reskin и touch-tuned gesture для
+  flag/reveal.
+- **Coach generality** - pattern detection уже покрывает named tactics.
+  Следующий research item - constraint-propagation deduction.
 
-Minesweeper was never the problem. The wrapper was. We rewrote the wrapper.
+Проблемой никогда не был Minesweeper. Проблемой была оболочка. Мы переписали
+оболочку.

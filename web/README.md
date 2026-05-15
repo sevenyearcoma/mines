@@ -1,8 +1,10 @@
 # MINES web app
 
-This is the Next.js app for MINES.
+Это Next.js-приложение для MINES.
 
-Use the repo-root `README.md` for setup, environment variables, deployment, and
-the live demo URL:
+Настройка, environment variables, deploy-инструкции и live demo URL находятся в
+корневом `README.md`.
+
+Live demo:
 
 https://mines.halfyy.tech
