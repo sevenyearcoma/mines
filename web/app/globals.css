@@ -117,7 +117,9 @@ body {
   overflow-x: hidden;
 }
 
-/* subtle grain overlay for body (dialed back from .55 to .22) */
+/* subtle grain overlay for body (dialed back from .55 to .22).
+   Disabled on small screens / touch devices — the mix-blend-mode overlay
+   is a per-frame compositing cost mobile GPUs really feel. */
 body::before {
   content: "";
   position: fixed; inset: 0;
@@ -126,6 +128,9 @@ body::before {
   mix-blend-mode: overlay;
   pointer-events: none;
   z-index: 1;
+}
+@media (max-width: 900px), (pointer: coarse) {
+  body::before { display: none; }
 }
 
 /* type utility */
@@ -1306,25 +1311,34 @@ body::before {
     font-size: 22px !important;
   }
 
+  /* Difficulty tabs are the most-tapped control on the play screen on mobile —
+     surface them on their own row at a real 44px tap-target height with a
+     clear active state. */
   .play-difficulty-tabs {
     order: 5;
-    flex: 1 1 0;
+    flex: 1 1 100% !important;
     min-width: 0;
     justify-content: space-between;
+    padding: 4px !important;
+    background: rgba(0, 0, 0, 0.55) !important;
+    border-radius: 8px !important;
   }
 
   .play-difficulty-tabs button {
     flex: 1 1 0;
-    padding: 7px 4px !important;
-    font-size: 9px !important;
+    min-height: 44px !important;
+    padding: 12px 8px !important;
+    font-size: 12px !important;
+    letter-spacing: 0.18em !important;
+    border-radius: 6px !important;
   }
 
   .play-new-button {
-    order: 5;
+    order: 6;
     flex: 0 0 auto;
-    min-height: 34px;
-    padding: 8px 10px !important;
-    font-size: 12px !important;
+    min-height: 44px;
+    padding: 10px 16px !important;
+    font-size: 13px !important;
   }
 
   .daily-hud-title {
@@ -1455,7 +1469,9 @@ body::before {
   }
 
   .play-difficulty-tabs button {
-    letter-spacing: 0.1em !important;
+    letter-spacing: 0.12em !important;
+    font-size: 11px !important;
+    padding: 11px 6px !important;
   }
 }
 

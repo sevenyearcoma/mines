@@ -40,6 +40,12 @@ export default function PhaserGame({
         initialRound ??
         roundConfigFromDifficulty("intermediate");
 
+      // Mobile detection — narrow viewport OR coarse pointer (real touch).
+      // Both heuristics catch tablets too, which we treat as "mobile-class"
+      // for rendering purposes.
+      const isMobile =
+        window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
+
       const game = new Phaser.Game({
         type: Phaser.AUTO,
         parent: hostRef.current,
@@ -51,7 +57,18 @@ export default function PhaserGame({
           height: hostRef.current.clientHeight,
         },
         scene: [BootScene, PreloadScene, BoardScene],
-        render: { antialias: true, roundPixels: false },
+        // On mobile/touch devices we drop multisample AA (huge GPU win on
+        // retina phones) and round pixels. Tiles are mostly flat colors so
+        // the visual cost is negligible compared to the FPS gain.
+        render: {
+          antialias: !isMobile,
+          antialiasGL: !isMobile,
+          roundPixels: isMobile,
+          pixelArt: false,
+        },
+        // Cap the FPS target so mobiles that can't sustain 60 don't thrash
+        // trying to. 45 still feels smooth, leaves thermal headroom.
+        fps: { target: isMobile ? 45 : 60, forceSetTimeOut: false },
         audio: { disableWebAudio: false },
       });
 
