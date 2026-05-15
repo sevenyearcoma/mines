@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { SiteHeader } from "@/components/auth/SiteHeader";
+import { MascotProvider, MascotRail } from "@/components/mascot/MascotRail";
 
 export const metadata: Metadata = {
   title: "MINES",
@@ -29,10 +30,15 @@ export default function RootLayout({
       </head>
       <body style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
         <AuthProvider>
-          <SiteHeader />
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-            {children}
-          </div>
+          <MascotProvider>
+            <div className="with-mascot-rail" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+              <SiteHeader />
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+                {children}
+              </div>
+            </div>
+            <MascotRail />
+          </MascotProvider>
         </AuthProvider>
       </body>
     </html>

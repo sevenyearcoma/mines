@@ -91,9 +91,21 @@ export interface ClientToServerEvents {
   "match:roundResult": (p: { roundIndex: number; result: RoundResult }) => void;
   "match:cellEvents": (p: CellEventBatch) => void;
   "match:leave": () => void;
+  "match:social:sync": () => void;
+  // Friend-invite pairing. The inviter creates a token, the joiner redeems it.
+  "match:invite:create": () => void;
+  "match:invite:cancel": () => void;
+  "match:invite:join": (p: { token: string }) => void;
+  "match:challenge:friend": (p: { userId: string }) => void;
+  "match:challenge:respond": (p: {
+    challengeId: string;
+    accept: boolean;
+  }) => void;
+  "match:challenge:cancel": (p: { challengeId: string }) => void;
 }
 
 export interface ServerToClientEvents {
+  "match:ready": () => void;
   "queue:status": (p: { queued: boolean }) => void;
   "match:start": (p: MatchStartPayload) => void;
   "match:roundStart": (p: RoundStartPayload) => void;
@@ -103,6 +115,26 @@ export interface ServerToClientEvents {
   "match:roundEnd": (p: RoundEndPayload) => void;
   "match:end": (p: MatchEndPayload) => void;
   "match:error": (p: { code: string; message: string }) => void;
+  "match:invite:ready": (p: {
+    token: string;
+    ttlMs: number;
+    targetUserId?: string;
+  }) => void;
+  "match:challenge:incoming": (p: {
+    challengeId: string;
+    from: PlayerHandle;
+    ttlMs: number;
+  }) => void;
+  "match:challenge:pending": (p: {
+    challengeId: string;
+    to: PlayerHandle;
+    ttlMs: number;
+  }) => void;
+  "match:challenge:cancelled": (p: {
+    challengeId: string;
+    reason: "cancelled" | "declined" | "expired" | "unavailable";
+    message?: string;
+  }) => void;
 }
 
 export type SocketAuth = {

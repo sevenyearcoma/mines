@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/copy-assets.mjs",
+    "predev": "node scripts/generate-sample-audio.mjs && node scripts/copy-assets.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/copy-assets.mjs",
+    "prebuild": "node scripts/generate-sample-audio.mjs && node scripts/copy-assets.mjs",
     "build": "next build",
+    "audio:placeholders": "node scripts/generate-sample-audio.mjs --force",
     "start": "next start",
     "typecheck": "tsc --noEmit"
   },

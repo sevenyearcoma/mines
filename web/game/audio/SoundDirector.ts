@@ -1,6 +1,11 @@
 import Phaser from "phaser";
 import { bridge } from "../bridge";
 
+const CASCADE_SAMPLE_MIN_CELLS = 5;
+const CASCADE_SAMPLE_DEBOUNCE_MS = 95;
+const MILESTONE_SAMPLE_DEBOUNCE_MS = 140;
+const COIN_LAYER_GAIN = 1 / 3;
+
 type RevealSoundPayload = {
   count: number;
   streak?: number;
@@ -18,6 +23,8 @@ type RevealSoundPayload = {
 export class SoundDirector {
   private scene: Phaser.Scene;
   private lastRevealAt = 0;
+  private lastCascadeSampleAt = 0;
+  private lastMilestoneSampleAt = 0;
   private synthContext: AudioContext | null = null;
   private synthBus: GainNode | null = null;
   private muted = false;
@@ -54,6 +61,14 @@ export class SoundDirector {
         });
       }
 
+      if (count >= CASCADE_SAMPLE_MIN_CELLS) {
+        this.playCascadeSample(count);
+      }
+
+      if (payload.milestone || (payload.tier ?? 0) >= 3) {
+        this.playMilestoneSample(payload);
+      }
+
       if (payload.hesitated) {
         this.playComboBreak();
       } else if ((payload.tier ?? 0) > 0) {
@@ -66,6 +81,7 @@ export class SoundDirector {
     };
 
     this.onChord = () => {
+      this.playCascadeSample(10);
       this.play("snd-reveal", { rate: 0.82, volume: 0.88 });
     };
 
@@ -75,10 +91,12 @@ export class SoundDirector {
     };
 
     this.onBoom = () => {
+      this.play("snd-boom-thump", { rate: 0.94, volume: 0.95 });
       this.play("snd-loss", { volume: 1 });
     };
 
     this.onWin = () => {
+      this.play("snd-win-fanfare", { volume: 0.58 });
       this.play("snd-reveal", { rate: 1.35, volume: 1 });
     };
 
@@ -109,6 +127,28 @@ export class SoundDirector {
     const audioCache = this.scene.cache?.audio;
     if (!this.scene.sound || !audioCache || !audioCache.has(key)) return;
     this.scene.sound.play(key, config);
+  }
+
+  private playCascadeSample(count: number) {
+    const now = performance.now();
+    if (now - this.lastCascadeSampleAt < CASCADE_SAMPLE_DEBOUNCE_MS) return;
+    this.lastCascadeSampleAt = now;
+    this.play("snd-chip-clatter", {
+      rate: 0.94 + Math.random() * 0.11,
+      volume: Math.min(0.82, 0.34 + Math.log10(Math.max(2, count)) * 0.22),
+    });
+  }
+
+  private playMilestoneSample(payload: RevealSoundPayload) {
+    const now = performance.now();
+    if (now - this.lastMilestoneSampleAt < MILESTONE_SAMPLE_DEBOUNCE_MS) return;
+    this.lastMilestoneSampleAt = now;
+    const tier = payload.tier ?? 1;
+    const volume = Math.min(0.9, 0.46 + tier * 0.1) * COIN_LAYER_GAIN;
+    this.play("snd-combo-ching", {
+      rate: 0.96 + tier * 0.035,
+      volume,
+    });
   }
 
   private ensureSynthContext(): AudioContext | null {
@@ -210,7 +250,7 @@ export class SoundDirector {
     filter.type = "bandpass";
     filter.frequency.setValueAtTime(tier >= 3 ? 2400 : 1700, start);
     filter.Q.value = 7;
-    gain.gain.setValueAtTime(0.018 + tier * 0.012, start);
+    gain.gain.setValueAtTime((0.018 + tier * 0.012) * COIN_LAYER_GAIN, start);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.08);
     source.buffer = buffer;
     source.connect(filter);

@@ -32,7 +32,7 @@ export interface ChordResult {
 // PvP / round-based play
 // ---------------------------------------------------------------------------
 
-export type RoundMode = "casual" | "match";
+export type RoundMode = "casual" | "match" | "daily";
 
 export interface RoundConfig {
   seed: number;
@@ -42,6 +42,14 @@ export interface RoundConfig {
   // null = no cap (casual). Match rounds set this to enforce a deadline.
   timeLimitMs: number | null;
   mode: RoundMode;
+  // HP for this round. Undefined → engine default (MAX_LIVES). Daily challenge
+  // uses 1 ("one life, pure hardcore"), regular casual/match keep 2.
+  maxLives?: number;
+  // If set, mines are placed at round setup using this cell as the safe-zone
+  // anchor, and that cell is auto-revealed before any input. Used for "same
+  // board for everyone" modes (daily challenge) so the first move is forced
+  // and the layout is identical for all players.
+  prePlant?: { r: number; c: number };
   // Optional metadata so the scene can echo it back in RoundResult.
   difficulty?: Difficulty;
   roundIndex?: number;
@@ -54,7 +62,7 @@ export interface ActionLogEntry {
   kind: ActionKind;
   r: number;
   c: number;
-  // ms since round start (i.e. since the first reveal). 0 before that.
+  // ms since round start. Casual/daily start on first action; match starts on load.
   atMs: number;
 }
 
@@ -66,6 +74,8 @@ export interface ScoreBreakdown {
   base: number;          // raw cells * BASE_PER_OPEN, no multiplier
   combo: number;         // points earned from speed + accuracy multipliers
   speed: number;         // end-of-round bonus, only awarded on clean wins
+  control: number;       // board-control bonus from safe clear percentage
+  penalty: number;       // mistake penalty subtracted from final score
   peakStreak: number;    // longest in-round speed streak
   peakAccuracyStreak: number;
   peakMultiplier: number;

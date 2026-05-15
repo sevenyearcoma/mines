@@ -1,13 +1,51 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { bridge, type BoardSnapshot, type GameStats } from "@/game/bridge";
 import { useMatchStore } from "@/lib/store/match";
 import type { RoundResult } from "@/lib/engine";
 import { disposeSocket, getSocket, type GameSocket } from "./socket";
-import type { CellEvent, ScoreSnapshot } from "./protocol";
+import type { CellEvent, PlayerHandle, ScoreSnapshot } from "./protocol";
+
+function inviteUrl(token: string): string {
+  if (typeof window === "undefined") return `/match?invite=${token}`;
+  const url = new URL("/match", window.location.origin);
+  url.searchParams.set("invite", token);
+  return url.toString();
+}
 
 const SCORE_TICK_INTERVAL_MS = 250;
+
+export interface InviteState {
+  token: string | null;
+  url: string | null;
+  ttlMs: number | null;
+  targetUserId: string | null;
+  role: "host" | "joiner" | null;
+}
+
+function emptyInvite(): InviteState {
+  return {
+    token: null,
+    url: null,
+    ttlMs: null,
+    targetUserId: null,
+    role: null,
+  };
+}
+
+export interface ChallengeState {
+  incoming: {
+    challengeId: string;
+    from: PlayerHandle;
+    ttlMs: number;
+  } | null;
+  outgoing: {
+    challengeId: string;
+    to: PlayerHandle;
+    ttlMs: number;
+  } | null;
+}
 
 export interface UseMultiplayerMatch {
   status: ReturnType<typeof useMatchStore.getState>["status"];
@@ -18,9 +56,17 @@ export interface UseMultiplayerMatch {
   spectating: ReturnType<typeof useMatchStore.getState>["spectating"];
   ownDeadSnapshot: ReturnType<typeof useMatchStore.getState>["ownDeadSnapshot"];
   errorMessage: string | null;
+  invite: InviteState;
+  challenge: ChallengeState;
   findMatch: () => void;
   leaveMatch: () => void;
   cancelSearch: () => void;
+  createInvite: () => void;
+  cancelInvite: () => void;
+  joinInvite: (token: string) => void;
+  challengeFriend: (userId: string) => void;
+  respondChallenge: (challengeId: string, accept: boolean) => void;
+  cancelChallenge: (challengeId: string) => void;
 }
 
 export function useMultiplayerMatch(): UseMultiplayerMatch {
@@ -36,6 +82,11 @@ export function useMultiplayerMatch(): UseMultiplayerMatch {
   const socketRef = useRef<GameSocket | null>(null);
   const roundIndexRef = useRef<number>(0);
   const lastTickAtRef = useRef<number>(0);
+  const [invite, setInvite] = useState<InviteState>(emptyInvite);
+  const [challenge, setChallenge] = useState<ChallengeState>({
+    incoming: null,
+    outgoing: null,
+  });
 
   // Mount: connect socket, wire all listeners. Unmount: tear it all down.
   useEffect(() => {
@@ -65,12 +116,21 @@ export function useMultiplayerMatch(): UseMultiplayerMatch {
       }
       socketRef.current = socket;
 
+      socket.on("connect", () => {
+        if ((socket as GameSocket & { __minesReady?: boolean }).__minesReady) {
+          store.getState().clearError();
+          socket.emit("match:social:sync");
+        }
+      });
+
       socket.on("queue:status", ({ queued }) => {
         if (queued) store.getState().setSearching();
       });
 
       socket.on("match:start", (p) => {
         roundIndexRef.current = 0;
+        setChallenge({ incoming: null, outgoing: null });
+        setInvite(emptyInvite());
         store.getState().applyMatchStart(p);
       });
 
@@ -78,8 +138,10 @@ export function useMultiplayerMatch(): UseMultiplayerMatch {
         roundIndexRef.current = p.roundIndex;
         lastTickAtRef.current = 0;
         store.getState().setCurrentRound(p.config);
-        // Hand off to Phaser — BoardScene already knows cmd:loadRound.
-        bridge.emit("cmd:loadRound", p.config);
+        // Let React mount/swap PhaserGame before the imperative scene command.
+        window.setTimeout(() => {
+          if (!cancelled) bridge.emit("cmd:loadRound", p.config);
+        }, 0);
       });
 
       socket.on("match:opponentScore", (p) => {
@@ -105,6 +167,44 @@ export function useMultiplayerMatch(): UseMultiplayerMatch {
         bridge.emit("cmd:applyRemoteEvents", p.events);
       });
 
+      socket.on("match:invite:ready", ({ token, ttlMs, targetUserId }) => {
+        const role = targetUserId ? null : "host";
+        setInvite({
+          token,
+          url: inviteUrl(token),
+          ttlMs,
+          targetUserId: targetUserId ?? null,
+          role,
+        });
+        if (role === "host") store.getState().setSearching();
+      });
+
+      socket.on("match:challenge:incoming", ({ challengeId, from, ttlMs }) => {
+        setChallenge((prev) => ({
+          ...prev,
+          incoming: { challengeId, from, ttlMs },
+        }));
+      });
+
+      socket.on("match:challenge:pending", ({ challengeId, to, ttlMs }) => {
+        setChallenge((prev) => ({
+          ...prev,
+          outgoing: { challengeId, to, ttlMs },
+        }));
+      });
+
+      socket.on("match:challenge:cancelled", ({ challengeId, message }) => {
+        setChallenge((prev) => ({
+          incoming:
+            prev.incoming?.challengeId === challengeId ? null : prev.incoming,
+          outgoing:
+            prev.outgoing?.challengeId === challengeId ? null : prev.outgoing,
+        }));
+        if (message && store.getState().status === "idle") {
+          store.getState().setError(message);
+        }
+      });
+
       socket.on("match:end", (p) => {
         store.getState().applyMatchEnd(p);
       });
@@ -112,12 +212,29 @@ export function useMultiplayerMatch(): UseMultiplayerMatch {
       let lastErrorAt = 0;
       socket.on("match:error", (p) => {
         lastErrorAt = Date.now();
+        if (
+          p.code === "invalid_invite" ||
+          p.code === "expired" ||
+          p.code === "self_invite" ||
+          p.code === "inviter_unavailable"
+        ) {
+          setInvite(emptyInvite());
+        }
+        if (p.code === "challenge_unavailable") {
+          setChallenge({ incoming: null, outgoing: null });
+        }
         store.getState().setError(p.message);
       });
 
       socket.on("disconnect", (reason) => {
         if (cancelled) return;
         if (reason === "io client disconnect") return;
+        if (
+          (socket as GameSocket & { active?: boolean }).active &&
+          reason !== "io server disconnect"
+        ) {
+          return;
+        }
         // If a match:error arrived in the last beat, keep its specific message
         // instead of clobbering it with the generic disconnect text.
         if (Date.now() - lastErrorAt < 1000) return;
@@ -127,6 +244,8 @@ export function useMultiplayerMatch(): UseMultiplayerMatch {
             : "Connection lost.",
         );
       });
+
+      socket.emit("match:social:sync");
     })();
 
     return () => {
@@ -143,28 +262,96 @@ export function useMultiplayerMatch(): UseMultiplayerMatch {
     };
   }, []);
 
-  const findMatch = useCallback(() => {
-    const s = socketRef.current;
+  const withSocket = useCallback((fn: (socket: GameSocket) => void) => {
     const store = useMatchStore.getState();
-    if (!s) {
-      store.setError("Not connected — please refresh.");
-      return;
-    }
-    store.setSearching();
-    s.emit("queue:join");
+    void (async () => {
+      try {
+        const socket = socketRef.current?.connected
+          ? socketRef.current
+          : await getSocket();
+        socketRef.current = socket;
+        fn(socket);
+      } catch (err) {
+        store.setError(
+          err instanceof Error ? err.message : "Failed to connect to multiplayer.",
+        );
+      }
+    })();
   }, []);
+
+  const findMatch = useCallback(() => {
+    const store = useMatchStore.getState();
+    store.setSearching();
+    withSocket((socket) => socket.emit("queue:join"));
+  }, [withSocket]);
 
   const cancelSearch = useCallback(() => {
     const s = socketRef.current;
-    if (s) s.emit("queue:leave");
+    if (s) {
+      s.emit("queue:leave");
+      if (invite.token || invite.role === "host") s.emit("match:invite:cancel");
+    }
+    setInvite(emptyInvite());
     useMatchStore.getState().setIdle();
-  }, []);
+  }, [invite.role, invite.token]);
 
   const leaveMatch = useCallback(() => {
     const s = socketRef.current;
     if (s) s.emit("match:leave");
+    setInvite(emptyInvite());
     useMatchStore.getState().reset();
   }, []);
+
+  const createInviteCb = useCallback(() => {
+    withSocket((socket) => socket.emit("match:invite:create"));
+  }, [withSocket]);
+
+  const cancelInviteCb = useCallback(() => {
+    const s = socketRef.current;
+    if (s) s.emit("match:invite:cancel");
+    setInvite(emptyInvite());
+    useMatchStore.getState().setIdle();
+  }, []);
+
+  const joinInviteCb = useCallback((token: string) => {
+    setInvite({
+      token,
+      url: inviteUrl(token),
+      ttlMs: null,
+      targetUserId: null,
+      role: "joiner",
+    });
+    useMatchStore.getState().setSearching();
+    withSocket((socket) => socket.emit("match:invite:join", { token }));
+  }, [withSocket]);
+
+  const challengeFriendCb = useCallback((userId: string) => {
+    if (!userId) return;
+    withSocket((socket) => socket.emit("match:challenge:friend", { userId }));
+  }, [withSocket]);
+
+  const respondChallengeCb = useCallback((challengeId: string, accept: boolean) => {
+    if (!challengeId) return;
+    if (accept) useMatchStore.getState().setSearching();
+    setChallenge((prev) => ({
+      incoming:
+        prev.incoming?.challengeId === challengeId ? null : prev.incoming,
+      outgoing: prev.outgoing,
+    }));
+    withSocket((socket) =>
+      socket.emit("match:challenge:respond", { challengeId, accept }),
+    );
+  }, [withSocket]);
+
+  const cancelChallengeCb = useCallback((challengeId: string) => {
+    if (!challengeId) return;
+    setChallenge((prev) => ({
+      incoming: prev.incoming,
+      outgoing:
+        prev.outgoing?.challengeId === challengeId ? null : prev.outgoing,
+    }));
+    withSocket((socket) => socket.emit("match:challenge:cancel", { challengeId }));
+  }, [withSocket]);
 
   return {
     status,
@@ -175,9 +362,17 @@ export function useMultiplayerMatch(): UseMultiplayerMatch {
     spectating,
     ownDeadSnapshot,
     errorMessage,
+    invite,
+    challenge,
     findMatch,
     leaveMatch,
     cancelSearch,
+    createInvite: createInviteCb,
+    cancelInvite: cancelInviteCb,
+    joinInvite: joinInviteCb,
+    challengeFriend: challengeFriendCb,
+    respondChallenge: respondChallengeCb,
+    cancelChallenge: cancelChallengeCb,
   };
 }
 

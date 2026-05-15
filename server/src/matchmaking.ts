@@ -37,3 +37,13 @@ export function leaveQueue(userId: string): void {
     waiting = null;
   }
 }
+
+export function replaceQueuedPlayer(
+  userId: string,
+  player: ConnectedPlayer,
+): void {
+  if (waiting?.handle.id !== userId) return;
+  waiting.inQueue = false;
+  waiting = player;
+  player.inQueue = true;
+}

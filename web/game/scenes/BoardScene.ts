@@ -82,6 +82,14 @@ export default class BoardScene extends Phaser.Scene {
   // frozen. Remote events drive the visuals only.
   private spectator = false;
   private spectatorName = "";
+  // Visual overlay shown during the post-mistake stun. Holds every transient
+  // object so a round reset / scene shutdown can rip them out cleanly.
+  private stunFx: {
+    objects: Phaser.GameObjects.GameObject[];
+    timers: Phaser.Time.TimerEvent[];
+    tweens: Phaser.Tweens.Tween[];
+    sparkTimer?: Phaser.Time.TimerEvent;
+  } | null = null;
 
   constructor() {
     super({ key: "BoardScene" });
@@ -96,7 +104,9 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   create() {
-    this.cameras.main.setBackgroundColor("#0e1318");
+    // Transparent canvas — the mascot rail in the page background shows through
+    // empty space around the board.
+    this.cameras.main.setBackgroundColor("rgba(0,0,0,0)");
 
     this.gridContainer = this.add.container(0, 0);
     this.frame = this.add.graphics();
@@ -107,7 +117,7 @@ export default class BoardScene extends Phaser.Scene {
     this.soundDirector = new SoundDirector(this);
 
     this.input.mouse?.disableContextMenu();
-    this.input.setDefaultCursor("pointer");
+    this.setDefaultCursor("pointer");
 
     this.setupBoard();
     this.layout();
@@ -139,6 +149,7 @@ export default class BoardScene extends Phaser.Scene {
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.soundDirector?.destroy();
+      this.clearStunFx();
       bridge.off("cmd:reset", this.resetBoard);
       bridge.off("cmd:setDifficulty", this.changeDifficulty);
       bridge.off("cmd:loadRound", this.loadRound);
@@ -160,14 +171,14 @@ export default class BoardScene extends Phaser.Scene {
     this.size = cellSizeFor(this.cols);
     this.board = emptyBoard(this.rows, this.cols);
     this.planted = false;
-    this.startedAt = null;
+    this.startedAt = this.round.mode === "match" ? Date.now() : null;
     this.endedAt = null;
     this.gameOver = false;
     this.won = false;
     this.opens = 0;
     this.clicks = 0;
     this.chains = 0;
-    this.lives = SCORE_CONSTANTS.MAX_LIVES;
+    this.lives = this.round.maxLives ?? SCORE_CONSTANTS.MAX_LIVES;
     this.stunnedUntilMs = null;
     this.actions = [];
     this.scoreState = newScoreState();
@@ -177,6 +188,7 @@ export default class BoardScene extends Phaser.Scene {
     this.hoverCell = null;
     this.spectator = false;
     this.spectatorName = "";
+    this.clearStunFx();
 
     // destroy any previous tile visuals
     this.tiles.flat().forEach((t) => t?.container?.destroy());
@@ -198,13 +210,34 @@ export default class BoardScene extends Phaser.Scene {
         seed: this.seed,
       });
     }
+
+    // Pre-planted rounds place mines deterministically and open the anchor
+    // cell so every player sees the same starting position. Match clocks start
+    // on board load; daily clocks start on the first real interaction.
+    if (this.round.prePlant) {
+      const { r, c } = this.round.prePlant;
+      plant(this.board, this.mines, this.seed, r, c);
+      this.planted = true;
+      const res = engineReveal(this.board, r, c);
+      this.opens = res.revealed.length;
+      // Stagger the open by BFS distance so the centre "blooms" outward —
+      // sells the daily as a curated starting position.
+      for (const rev of res.revealed) {
+        const stagger = rev.dist * 18;
+        this.time.delayedCall(stagger, () =>
+          this.applyRevealVisual(rev.r, rev.c),
+        );
+      }
+    }
+
     this.emitStats();
   }
 
   private resetBoard = () => {
     // Match-mode rounds aren't player-resettable — only the match controller
-    // decides when the next round loads.
-    if (this.round.mode === "match") return;
+    // decides when the next round loads. Daily challenges are one-shot per
+    // UTC day, so they're not resettable either.
+    if (this.round.mode === "match" || this.round.mode === "daily") return;
     const carryStreak = this.gameOver && this.won;
     const prevStreak = this.streak;
     const prevBest = Math.max(this.streakBest, this.streak);
@@ -223,7 +256,7 @@ export default class BoardScene extends Phaser.Scene {
   };
 
   private changeDifficulty = (d: Difficulty) => {
-    if (this.round.mode === "match") return;
+    if (this.round.mode === "match" || this.round.mode === "daily") return;
     if (d === this.round.difficulty) return;
     this.round = roundConfigFromDifficulty(d, undefined, "casual");
     this.streak = 0;
@@ -234,6 +267,7 @@ export default class BoardScene extends Phaser.Scene {
   };
 
   private loadRound = (config: RoundConfig) => {
+    if (!this.input?.manager) return;
     this.round = config;
     // Streak is a casual concept; match rounds are sovereign.
     this.streak = 0;
@@ -387,8 +421,9 @@ export default class BoardScene extends Phaser.Scene {
     const oy = cy - frameH / 2;
 
     this.frame.clear();
-    // outer frame: panel + gold border
-    this.frame.fillStyle(0x0f1418);
+    // outer frame: very faint panel fill so the mascot reads through, plus the
+    // signature gold border.
+    this.frame.fillStyle(0x0f1418, 0.55);
     this.frame.fillRoundedRect(ox, oy, frameW, frameH, 14);
     this.frame.lineStyle(2, 0xb48127);
     this.frame.strokeRoundedRect(ox, oy, frameW, frameH, 14);
@@ -472,7 +507,8 @@ export default class BoardScene extends Phaser.Scene {
     if (!this.leftDown && !this.rightDown) this.chordConsumed = false;
   };
 
-  // ms since round start. Returns 0 before the first reveal.
+  // ms since round start. Casual/daily rounds start on first interaction;
+  // match rounds start as soon as the board loads.
   private nowMs(): number {
     return this.startedAt === null ? 0 : Date.now() - this.startedAt;
   }
@@ -498,6 +534,9 @@ export default class BoardScene extends Phaser.Scene {
     if (!this.planted) {
       plant(this.board, this.mines, this.seed, r, c);
       this.planted = true;
+      if (this.startedAt === null) this.startedAt = Date.now();
+    } else if (this.startedAt === null) {
+      // Pre-planted round (daily) — clock starts on first real interaction.
       this.startedAt = Date.now();
     }
 
@@ -553,6 +592,8 @@ export default class BoardScene extends Phaser.Scene {
     if (this.gameOver || this.spectator || this.isStunned()) return;
     const cell = this.board[r][c];
     if (cell.revealed) return;
+    // Flagging is a valid first interaction on a pre-planted board.
+    if (this.planted && this.startedAt === null) this.startedAt = Date.now();
     const now = engineFlag(this.board, r, c);
     this.logAction(now ? "flag" : "unflag", r, c);
     const t = this.tiles[r][c];
@@ -585,6 +626,8 @@ export default class BoardScene extends Phaser.Scene {
     if (!cell.revealed || cell.adj === 0) return;
     const res = engineChord(this.board, r, c);
     if (res.revealed.length === 0) return;
+    // Chord on a pre-revealed cell is a valid first interaction (daily).
+    if (this.planted && this.startedAt === null) this.startedAt = Date.now();
     const atMs = this.nowMs();
     this.logAction("chord", r, c);
     const safeRevealed = res.revealed.filter((x) => !this.board[x.r][x.c].mine);
@@ -655,6 +698,7 @@ export default class BoardScene extends Phaser.Scene {
       this.time.delayedCall(stagger, () => this.applyRevealVisual(rev.r, rev.c));
     }
     this.applyMistakeJuice(boom, this.lives);
+    this.playStunOverlay(boom, SCORE_CONSTANTS.MISTAKE_STUN_MS);
     bridge.emit("sound:mistake", {
       lives: this.lives,
       stunMs: SCORE_CONSTANTS.MISTAKE_STUN_MS,
@@ -830,6 +874,277 @@ export default class BoardScene extends Phaser.Scene {
     }
   }
 
+  // Big, theatrical "you are frozen" overlay so the 3s lockout reads as a
+  // deliberate consequence rather than a hung frame. Tinted glass, pulsing
+  // red frame, radial cracks at the boom cell, countdown that lands like a
+  // metronome, then a release shatter.
+  private playStunOverlay(
+    boom: { r: number; c: number } | null,
+    durationMs: number,
+  ) {
+    this.clearStunFx();
+
+    const pad = 18;
+    const w = this.cols * this.size + (this.cols - 1) * this.gap;
+    const h = this.rows * this.size + (this.rows - 1) * this.gap;
+    const ox = this.originX - pad;
+    const oy = this.originY - pad;
+    const fw = w + pad * 2;
+    const fh = h + pad * 2;
+    const cx = ox + fw / 2;
+    const cy = oy + fh / 2;
+
+    const objects: Phaser.GameObjects.GameObject[] = [];
+    const timers: Phaser.Time.TimerEvent[] = [];
+    const tweens: Phaser.Tweens.Tween[] = [];
+
+    // 1. Dim wash — knocks the grid back so the player feels locked out.
+    const wash = this.add.rectangle(cx, cy, fw, fh, 0x230808, 0).setDepth(55);
+    objects.push(wash);
+    tweens.push(
+      this.tweens.add({
+        targets: wash,
+        alpha: 0.55,
+        duration: 140,
+        ease: "Cubic.Out",
+      }),
+    );
+
+    // 2. Pulsing red frame around the grid. Matches the existing gold frame
+    //    so it reads as "your board is in alarm state".
+    const frame = this.add.graphics().setDepth(58);
+    const drawFrame = (alpha: number, inset: number) => {
+      frame.clear();
+      frame.lineStyle(3, 0xff4d4d, alpha);
+      frame.strokeRoundedRect(ox + inset, oy + inset, fw - inset * 2, fh - inset * 2, 14);
+      frame.lineStyle(1, 0xff8a8a, alpha * 0.6);
+      frame.strokeRoundedRect(ox + inset + 4, oy + inset + 4, fw - (inset + 4) * 2, fh - (inset + 4) * 2, 10);
+    };
+    drawFrame(0.9, 0);
+    objects.push(frame);
+    const frameState = { a: 0.9, i: 0 };
+    tweens.push(
+      this.tweens.add({
+        targets: frameState,
+        a: 0.4,
+        i: 3,
+        duration: 480,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.InOut",
+        onUpdate: () => drawFrame(frameState.a, frameState.i),
+      }),
+    );
+
+    // 3. Radial cracks from the boom cell. Hand-drawn lines + chips so it
+    //    feels like the board itself fractured.
+    if (boom) {
+      const t = this.tiles[boom.r]?.[boom.c];
+      if (t) {
+        const bx = t.container.x + this.size / 2;
+        const by = t.container.y + this.size / 2;
+        const cracks = this.add.graphics().setDepth(57);
+        cracks.lineStyle(2.2, 0xffd0d0, 0.95);
+        const arms = 7;
+        for (let i = 0; i < arms; i++) {
+          const angle = (Math.PI * 2 * i) / arms + Math.random() * 0.5;
+          const len = this.size * (2.6 + Math.random() * 1.6);
+          let x = bx;
+          let y = by;
+          let a = angle;
+          cracks.beginPath();
+          cracks.moveTo(x, y);
+          // Polyline with kinks — readable as a crack rather than a beam.
+          const segs = 4;
+          for (let k = 0; k < segs; k++) {
+            const segLen = len / segs;
+            a += (Math.random() - 0.5) * 0.7;
+            x += Math.cos(a) * segLen;
+            y += Math.sin(a) * segLen;
+            cracks.lineTo(x, y);
+          }
+          cracks.strokePath();
+        }
+        cracks.setAlpha(0);
+        objects.push(cracks);
+        tweens.push(
+          this.tweens.add({
+            targets: cracks,
+            alpha: 1,
+            scale: { from: 0.6, to: 1 },
+            duration: 220,
+            ease: "Back.Out",
+          }),
+        );
+      }
+    }
+
+    // 4. "FROZEN" label + big countdown number.
+    const label = this.add
+      .text(cx, cy - this.size * 1.4, "FROZEN", {
+        fontFamily: "Georgia, serif",
+        fontSize: `${Math.round(this.size * 0.95)}px`,
+        fontStyle: "bold italic",
+        color: "#ffd6d6",
+        stroke: "#3a0808",
+        strokeThickness: 6,
+      })
+      .setOrigin(0.5)
+      .setDepth(70)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    label.setScale(0.4);
+    objects.push(label);
+    tweens.push(
+      this.tweens.add({
+        targets: label,
+        scale: 1,
+        duration: 240,
+        ease: "Back.Out",
+      }),
+    );
+    tweens.push(
+      this.tweens.add({
+        targets: label,
+        alpha: { from: 1, to: 0.7 },
+        duration: 520,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.InOut",
+      }),
+    );
+
+    const countdown = this.add
+      .text(cx, cy + this.size * 0.5, "", {
+        fontFamily: "Georgia, serif",
+        fontSize: `${Math.round(this.size * 3.2)}px`,
+        fontStyle: "bold",
+        color: "#ff6a6a",
+        stroke: "#1a0303",
+        strokeThickness: 8,
+      })
+      .setOrigin(0.5)
+      .setDepth(72)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    objects.push(countdown);
+
+    const seconds = Math.max(1, Math.round(durationMs / 1000));
+    const popNumber = (n: number) => {
+      countdown.setText(String(n));
+      countdown.setScale(0.001);
+      countdown.setAlpha(1);
+      tweens.push(
+        this.tweens.add({
+          targets: countdown,
+          scale: 1,
+          duration: 220,
+          ease: "Back.Out",
+        }),
+      );
+      tweens.push(
+        this.tweens.add({
+          targets: countdown,
+          alpha: 0.55,
+          duration: 800,
+          ease: "Sine.InOut",
+        }),
+      );
+    };
+    popNumber(seconds);
+    for (let i = 1; i < seconds; i++) {
+      timers.push(
+        this.time.delayedCall(i * 1000, () => popNumber(seconds - i)),
+      );
+    }
+
+    // 5. Continuous sparks around the boom cell — keeps motion alive during
+    //    the otherwise-quiet wait window.
+    const sparkTimer = boom
+      ? this.time.addEvent({
+          delay: 130,
+          loop: true,
+          callback: () => {
+            const t = this.tiles[boom.r]?.[boom.c];
+            if (!t) return;
+            const bx = t.container.x + this.size / 2;
+            const by = t.container.y + this.size / 2;
+            for (let i = 0; i < 3; i++) {
+              const angle = Math.random() * Math.PI * 2;
+              const dist = this.size * (0.4 + Math.random() * 1.4);
+              const p = this.add
+                .circle(bx, by, 2 + Math.random() * 2, 0xffb4b4, 1)
+                .setDepth(73)
+                .setBlendMode(Phaser.BlendModes.ADD);
+              this.tweens.add({
+                targets: p,
+                x: bx + Math.cos(angle) * dist,
+                y: by + Math.sin(angle) * dist,
+                alpha: 0,
+                scale: 0,
+                duration: 520,
+                ease: "Cubic.Out",
+                onComplete: () => p.destroy(),
+              });
+            }
+          },
+        })
+      : undefined;
+
+    // 6. Soft repeated micro-shakes so the camera doesn't go totally still.
+    const shakeTimer = this.time.addEvent({
+      delay: 360,
+      loop: true,
+      callback: () => this.cameras.main.shake(120, 0.0028),
+    });
+    timers.push(shakeTimer);
+
+    // 7. Cursor signals "no go".
+    this.setDefaultCursor("not-allowed");
+
+    // 8. Auto-release with a final flash + shatter feel.
+    timers.push(
+      this.time.delayedCall(durationMs, () => this.releaseStunFx(cx, cy, fw, fh)),
+    );
+
+    this.stunFx = { objects, timers, tweens, sparkTimer };
+  }
+
+  private releaseStunFx(cx: number, cy: number, fw: number, fh: number) {
+    if (!this.stunFx) return;
+    // Quick white flash that snaps the player back to attention.
+    const flash = this.add
+      .rectangle(cx, cy, fw, fh, 0xffe4e4, 0.65)
+      .setDepth(80)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      duration: 220,
+      ease: "Cubic.Out",
+      onComplete: () => flash.destroy(),
+    });
+    this.cameras.main.shake(140, 0.004);
+    this.clearStunFx();
+  }
+
+  private clearStunFx() {
+    this.setDefaultCursor("pointer");
+    if (!this.stunFx) return;
+    for (const tw of this.stunFx.tweens) tw.stop();
+    for (const tm of this.stunFx.timers) tm.remove(false);
+    this.stunFx.sparkTimer?.remove(false);
+    for (const o of this.stunFx.objects) o.destroy();
+    this.stunFx = null;
+  }
+
+  private setDefaultCursor(cursor: string) {
+    try {
+      this.input?.setDefaultCursor(cursor);
+    } catch {
+      // Phaser can null its canvas/input internals during scene teardown while
+      // Socket.IO round events are still arriving. Ignore stale scene writes.
+    }
+  }
+
   private applyMistakeJuice(boom: { r: number; c: number } | null, lives: number) {
     if (!boom) return;
     const t = this.tiles[boom.r]?.[boom.c];
@@ -933,7 +1248,13 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   private currentScore(reason: RoundEndReason, elapsedMs: number): ScoreBreakdown {
-    return finalizeScore(this.scoreState, elapsedMs, reason);
+    return finalizeScore(
+      this.scoreState,
+      elapsedMs,
+      reason,
+      this.countSafeRevealed(),
+      this.rows * this.cols - this.mines,
+    );
   }
 
   private endRound(
@@ -945,6 +1266,9 @@ export default class BoardScene extends Phaser.Scene {
     this.gameOver = true;
     this.won = reason === "won";
     this.endedAt = Date.now();
+    // A round can end mid-stun (timeout, forced explode on no-lives). Wipe
+    // overlay so the result screen isn't fighting a "FROZEN" banner.
+    this.clearStunFx();
     const elapsedMs =
       this.endedAt - (this.startedAt ?? this.endedAt);
 
@@ -959,7 +1283,7 @@ export default class BoardScene extends Phaser.Scene {
 
     // Flag accuracy is post-round stats only — it does NOT feed into score.
     const { correctFlags, misflags } = this.flagAccuracy();
-    const score = finalizeScore(this.scoreState, elapsedMs, reason);
+    const score = this.currentScore(reason, elapsedMs);
     const flagged = countFlags(this.board);
 
     const result: RoundResult = {
@@ -985,8 +1309,9 @@ export default class BoardScene extends Phaser.Scene {
     bridge.emit("round:end", result);
     bridge.emit("score:update", score);
 
-    // Legacy event so the existing casual HUD / GameRecorder keep working.
-    if (this.round.mode === "casual") {
+    // Solo flows (casual + daily) share this overlay/recorder path. Match
+    // mode uses round:end → MatchHUD instead.
+    if (this.round.mode === "casual" || this.round.mode === "daily") {
       bridge.emit("game:over", {
         won: this.won,
         elapsedMs,
@@ -1072,7 +1397,7 @@ export default class BoardScene extends Phaser.Scene {
       liveAccuracyMultiplier,
       accuracyStreak: this.scoreState.accuracyStreak,
       lives: this.lives,
-      maxLives: SCORE_CONSTANTS.MAX_LIVES,
+      maxLives: this.round.maxLives ?? SCORE_CONSTANTS.MAX_LIVES,
       stunRemainingMs,
       timeLeftMs,
       cellsRevealed: this.countSafeRevealed(),

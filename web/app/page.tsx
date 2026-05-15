@@ -1,107 +1,7 @@
 import Link from "next/link";
-
-const previewCells = [
-  "h",
-  "h",
-  "h",
-  "f",
-  "h",
-  "h",
-  "h",
-  "h",
-  "h",
-  "h",
-  "h",
-  "r1",
-  "r1",
-  "r2",
-  "h",
-  "h",
-  "r1",
-  "r0",
-  "r0",
-  "h",
-  "h",
-  "r1",
-  "r0",
-  "r1",
-  "r2",
-  "h",
-  "r1",
-  "r0",
-  "r1",
-  "h",
-  "h",
-  "r2",
-  "r1",
-  "r1",
-  "f",
-  "h",
-  "r2",
-  "r1",
-  "r2",
-  "h",
-  "h",
-  "h",
-  "r2",
-  "r2",
-  "r3",
-  "h",
-  "h",
-  "r2",
-  "f",
-  "h",
-  "h",
-  "r1",
-  "r0",
-  "r0",
-  "r2",
-  "h",
-  "r3",
-  "h",
-  "h",
-  "h",
-  "r2",
-  "r1",
-  "r0",
-  "r0",
-  "r1",
-  "r2",
-  "h",
-  "r2",
-  "h",
-  "h",
-  "r3",
-  "h",
-  "r2",
-  "r1",
-  "r0",
-  "r1",
-  "h",
-  "h",
-  "h",
-  "m",
-  "h",
-  "r3",
-  "f",
-  "h",
-  "r1",
-  "r1",
-  "h",
-  "r2",
-  "h",
-  "h",
-  "h",
-  "h",
-  "h",
-  "h",
-  "h",
-  "h",
-  "h",
-  "h",
-  "h",
-  "h",
-];
+import { DailyPreviewBoard } from "@/components/home/DailyPreviewBoard";
+import { HomeLeaderboard } from "@/components/home/HomeLeaderboard";
+import { MascotScene } from "@/components/mascot/MascotScene";
 
 const tableStats = [
   { label: "queue", value: "18s", tone: "gold" },
@@ -111,10 +11,16 @@ const tableStats = [
 
 const modes = [
   {
+    href: "/daily",
+    label: "Daily challenge",
+    meta: "one life, pure hardcore",
+    className: "btn btn-red sparkle",
+  },
+  {
     href: "/play",
     label: "Solo sprint",
     meta: "warm-up table",
-    className: "btn btn-gold sparkle",
+    className: "btn btn-gold",
   },
   {
     href: "/match",
@@ -130,23 +36,10 @@ const modes = [
   },
 ];
 
-const leaderboard = [
-  { name: "vanta", score: "1842", streak: "+6" },
-  { name: "rail", score: "1769", streak: "+3" },
-  { name: "zero", score: "1711", streak: "+1" },
-];
-
-function cellLabel(cell: string) {
-  if (cell === "h") return "";
-  if (cell === "f") return "";
-  if (cell === "m") return "";
-  if (cell === "r0") return "";
-  return cell.replace("r", "");
-}
-
 export default function Home() {
   return (
     <main className="home-shell">
+      <MascotScene pose="chipCount" caption="stack your chips, friend" />
       <section className="home-table" aria-label="Mines main table">
         <div className="home-copy">
           <div className="home-kicker mono">PvP beta table</div>
@@ -171,29 +64,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="home-board-stage" aria-label="Mines board preview">
-          <div className="home-board-top">
-            <div>
-              <span className="mono">table 07</span>
-              <strong>rated race</strong>
-            </div>
-            <div className="home-clock mono">01:17</div>
-          </div>
-          <div className="home-board">
-            {previewCells.map((cell, index) => (
-              <span
-                className={`home-cell home-cell-${cell}`}
-                key={`${cell}-${index}`}
-              >
-                {cellLabel(cell)}
-              </span>
-            ))}
-          </div>
-          <div className="home-board-bottom">
-            <span className="chip chip-green">safe streak 11</span>
-            <span className="chip chip-red">mine odds rising</span>
-          </div>
-        </div>
+        <DailyPreviewBoard />
 
         <aside className="home-action-panel panel panel-gold">
           <div>
@@ -209,17 +80,7 @@ export default function Home() {
             ))}
           </div>
           <div className="home-divider" />
-          <div className="home-leaderboard" aria-label="Lobby leaderboard">
-            <div className="home-panel-label mono">hot seats</div>
-            {leaderboard.map((player, index) => (
-              <div className="home-rank-row" key={player.name}>
-                <span className="mono">{index + 1}</span>
-                <strong>{player.name}</strong>
-                <em>{player.score}</em>
-                <b>{player.streak}</b>
-              </div>
-            ))}
-          </div>
+          <HomeLeaderboard />
         </aside>
       </section>
 

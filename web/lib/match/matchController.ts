@@ -36,6 +36,8 @@ function defaultBaseConfig(): MatchSnapshot["baseConfig"] {
     mines: 40,
     timeLimitMs: MATCH_ROUND_TIME_MS,
     mode: "match",
+    maxLives: 2,
+    prePlant: { r: 8, c: 8 },
   };
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { bridge, type GameStats, type GameOverPayload } from "@/game/bridge";
-import type { Difficulty } from "@/lib/engine";
+import type { ActionLogEntry, Difficulty, RoundResult } from "@/lib/engine";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { capture } from "@/lib/analytics/posthog";
 import { useAuth } from "./AuthProvider";
@@ -23,6 +23,9 @@ export function GameRecorder({
   userRef.current = user;
 
   const statsRef = useRef<GameStats | null>(null);
+  // round:end fires immediately before game:over and carries the full action
+  // log. Stash it so the persist path on game:over can include it.
+  const actionsRef = useRef<ActionLogEntry[] | null>(null);
 
   useEffect(() => {
     const supabase = getBrowserSupabase();
@@ -32,10 +35,16 @@ export function GameRecorder({
     };
     const onStart = (p: { difficulty: Difficulty; seed: number }) => {
       capture("solo_game_started", { difficulty: p.difficulty, seed: p.seed });
+      actionsRef.current = null;
       onSaveStateChange?.({ kind: "idle" });
     };
     const onReset = () => {
+      actionsRef.current = null;
       onSaveStateChange?.({ kind: "idle" });
+    };
+    const onRoundEnd = (result: RoundResult) => {
+      if (result.config.mode !== "casual") return;
+      actionsRef.current = result.actions;
     };
 
     const onOver = async (p: GameOverPayload) => {
@@ -67,6 +76,7 @@ export function GameRecorder({
           post_loss_hint_count: p.postLossHintCount,
           boom_r: p.boomCell?.r ?? null,
           boom_c: p.boomCell?.c ?? null,
+          actions: actionsRef.current ?? null,
         });
         if (error) throw error;
         onSaveStateChange?.({ kind: "saved" });
@@ -79,11 +89,13 @@ export function GameRecorder({
     bridge.on("stats:update", onStats);
     bridge.on("game:start", onStart);
     bridge.on("game:reset", onReset);
+    bridge.on("round:end", onRoundEnd);
     bridge.on("game:over", onOver);
     return () => {
       bridge.off("stats:update", onStats);
       bridge.off("game:start", onStart);
       bridge.off("game:reset", onReset);
+      bridge.off("round:end", onRoundEnd);
       bridge.off("game:over", onOver);
     };
   }, [onSaveStateChange]);

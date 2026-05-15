@@ -1,9 +1,12 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getBrowserSupabase } from "@/lib/supabase/client";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { capture } from "@/lib/analytics/posthog";
+
+const GUEST_NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,20}$/;
 
 export default function SignInPage() {
   return (
@@ -15,10 +18,15 @@ export default function SignInPage() {
 
 function SignInForm() {
   const supabase = getBrowserSupabase();
+  const router = useRouter();
   const search = useSearchParams();
   const callbackError = search.get("error");
+  const next = search.get("next");
+  const { signInAsGuest } = useAuth();
 
   const [email, setEmail] = useState("");
+  const [guestName, setGuestName] = useState("");
+  const [guestError, setGuestError] = useState<string | null>(null);
   const [status, setStatus] = useState<
     | { kind: "idle" }
     | { kind: "sending" }
@@ -27,7 +35,11 @@ function SignInForm() {
   >({ kind: "idle" });
 
   const redirectTo =
-    typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
+    typeof window !== "undefined"
+      ? `${window.location.origin}/auth/callback${
+          next ? `?next=${encodeURIComponent(next)}` : ""
+        }`
+      : undefined;
 
   async function signInWithGitHub() {
     capture("sign_in_initiated", { method: "github" });
@@ -55,6 +67,18 @@ function SignInForm() {
     }
   }
 
+  function startAsGuest(e: React.FormEvent) {
+    e.preventDefault();
+    setGuestError(null);
+    const trimmed = guestName.trim();
+    if (!GUEST_NAME_PATTERN.test(trimmed)) {
+      setGuestError("2-20 chars, letters, numbers, space, _ or -");
+      return;
+    }
+    signInAsGuest(trimmed);
+    router.push(next ?? "/");
+  }
+
   return (
     <main
       style={{
@@ -79,13 +103,13 @@ function SignInForm() {
             className="disp"
             style={{ fontSize: 30, fontStyle: "italic", letterSpacing: "-0.01em" }}
           >
-            sign in
+            sit at the table
           </div>
           <div
             className="mono upper"
             style={{ fontSize: 10, color: "var(--ink-mute)", letterSpacing: "0.3em", marginTop: 6 }}
           >
-            persist your runs
+            no chips needed
           </div>
         </div>
 
@@ -98,17 +122,81 @@ function SignInForm() {
           </div>
         )}
 
+        <form
+          onSubmit={startAsGuest}
+          style={{ display: "flex", flexDirection: "column", gap: 10 }}
+        >
+          <div
+            className="mono upper"
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.22em",
+              color: "var(--gold)",
+            }}
+          >
+            play as guest
+          </div>
+          <input
+            type="text"
+            required
+            placeholder="your name at the table"
+            value={guestName}
+            onChange={(e) => setGuestName(e.target.value)}
+            maxLength={20}
+            className="mono"
+            style={{
+              padding: "10px 12px",
+              borderRadius: "var(--r-2)",
+              border: "1px solid var(--line)",
+              background: "rgba(0,0,0,.25)",
+              color: "var(--ink)",
+              fontSize: 13,
+              outline: "none",
+            }}
+          />
+          <button
+            type="submit"
+            className="btn btn-gold sparkle"
+            style={{ padding: "12px 16px", justifyContent: "center" }}
+          >
+            start playing
+          </button>
+          {guestError && (
+            <div
+              className="mono"
+              style={{
+                fontSize: 11,
+                color: "var(--red-glow)",
+                textAlign: "center",
+              }}
+            >
+              {guestError}
+            </div>
+          )}
+          <div
+            className="mono"
+            style={{
+              fontSize: 10,
+              color: "var(--ink-mute)",
+              textAlign: "center",
+              lineHeight: 1.5,
+            }}
+          >
+            session-only · sign in to save your runs
+          </div>
+        </form>
+
+        <div className="div-label">or sign in</div>
+
         <button
           type="button"
-          className="btn btn-gold"
+          className="btn btn-ghost"
           onClick={signInWithGitHub}
           disabled={status.kind === "sending"}
-          style={{ padding: "12px 16px", justifyContent: "center" }}
+          style={{ padding: "10px 14px", justifyContent: "center" }}
         >
           continue with github
         </button>
-
-        <div className="div-label">or email</div>
 
         <form
           onSubmit={sendMagicLink}
@@ -116,7 +204,6 @@ function SignInForm() {
         >
           <input
             type="email"
-            required
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}

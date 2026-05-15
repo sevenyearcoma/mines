@@ -1,26 +1,60 @@
-import { cp, mkdir, readdir } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const src = resolve(__dirname, "..", "assets");
-const dest = resolve(__dirname, "..", "public", "assets", "audio");
+const assetsRoot = resolve(__dirname, "..", "assets");
+
+const copyJobs = [
+  {
+    src: assetsRoot,
+    dest: resolve(__dirname, "..", "public", "assets", "audio"),
+    pattern: /\.(ogg|mp3|wav)$/i,
+    label: "audio",
+  },
+  {
+    src: resolve(assetsRoot, "media"),
+    dest: resolve(__dirname, "..", "public", "assets", "media"),
+    pattern: /\.(png|jpg|jpeg|webp|avif|gif)$/i,
+    label: "media",
+  },
+];
 
 async function main() {
-  if (!existsSync(src)) {
-    console.warn(`[copy-assets] source missing: ${src}`);
-    return;
-  }
-  await mkdir(dest, { recursive: true });
-  const files = await readdir(src);
   let copied = 0;
-  for (const f of files) {
-    if (!/\.(ogg|mp3|wav)$/i.test(f)) continue;
-    await cp(join(src, f), join(dest, f));
-    copied++;
+  let skipped = 0;
+  for (const job of copyJobs) {
+    if (!existsSync(job.src)) {
+      console.warn(`[copy-assets] ${job.label} source missing: ${job.src}`);
+      continue;
+    }
+    await mkdir(job.dest, { recursive: true });
+    const files = await readdir(job.src);
+    for (const f of files) {
+      if (!job.pattern.test(f)) continue;
+      const from = join(job.src, f);
+      const to = join(job.dest, f);
+      if (await sameFile(from, to)) {
+        skipped++;
+        continue;
+      }
+      await copyFile(from, to);
+      copied++;
+    }
   }
-  console.log(`[copy-assets] copied ${copied} audio file(s) to public/assets/audio/`);
+  console.log(
+    `[copy-assets] copied ${copied} asset file(s), skipped ${skipped} unchanged`,
+  );
+}
+
+async function sameFile(a, b) {
+  try {
+    const [left, right] = await Promise.all([readFile(a), readFile(b)]);
+    return left.equals(right);
+  } catch {
+    return false;
+  }
 }
 
 main().catch((err) => {

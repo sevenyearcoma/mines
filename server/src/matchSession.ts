@@ -16,13 +16,17 @@ import type {
   MatchPlayerState,
   MatchSession,
 } from "./types.js";
-import { getMatch, removeMatch, setMatch } from "./registry.js";
+import { getMatch, getPlayer, removeMatch, setMatch } from "./registry.js";
 
 const ROUND_TIME_MS = 120_000;       // 2 minutes per round (matches CLAUDE.md)
 const ROUND_GRACE_MS = 250;          // server-side grace beyond client timer
 const BETWEEN_ROUNDS_MS = 1500;      // pause between rounds for overlays
 const MATCH_ROUNDS = 5;
 const ROUND_WINS_NEEDED = 3;
+const MATCH_LIVES = 2;
+const CONTROL_FULL_BONUS = 1200;
+const MISTAKE_PENALTY_FIRST = 300;
+const MISTAKE_PENALTY_EXTRA = 550;
 
 function freshScoreSnapshot(): ScoreSnapshot {
   return {
@@ -46,6 +50,8 @@ function baseConfig(): MatchSession["baseConfig"] {
     mines: 40,
     timeLimitMs: ROUND_TIME_MS,
     mode: "match",
+    maxLives: MATCH_LIVES,
+    prePlant: { r: 8, c: 8 },
   };
 }
 
@@ -56,6 +62,29 @@ function buildRoundConfig(match: MatchSession, idx: number): RoundConfig {
     roundIndex: idx,
     matchId: match.id,
   };
+}
+
+function findPlayerIndex(match: MatchSession, userId: string): 0 | 1 | null {
+  const idx = match.players.findIndex((p) => p.handle.id === userId);
+  return idx === 0 || idx === 1 ? idx : null;
+}
+
+function buildMatchStartPayload(
+  match: MatchSession,
+  youAre: 0 | 1,
+): MatchStartPayload {
+  return {
+    matchId: match.id,
+    players: [match.players[0].handle, match.players[1].handle],
+    baseConfig: match.baseConfig,
+    youAre,
+  };
+}
+
+function roundWinner(r0: RoundResult, r1: RoundResult): 0 | 1 | null {
+  if (r0.score.total > r1.score.total) return 0;
+  if (r1.score.total > r0.score.total) return 1;
+  return null;
 }
 
 function buildPlayerState(p: ConnectedPlayer): MatchPlayerState {
@@ -112,17 +141,71 @@ export function createMatch(
   // Tell both clients the match is on, then start round 0.
   for (const youAre of [0, 1] as const) {
     const player = match.players[youAre];
-    const startPayload: MatchStartPayload = {
-      matchId: id,
-      players: [match.players[0].handle, match.players[1].handle],
-      baseConfig: match.baseConfig,
-      youAre,
-    };
-    send(player, "match:start", startPayload);
+    send(player, "match:start", buildMatchStartPayload(match, youAre));
   }
 
   startRound(match);
   return match;
+}
+
+export function syncMatchState(player: ConnectedPlayer): boolean {
+  if (!player.matchId) return false;
+  const match = getMatch(player.matchId);
+  if (!match) {
+    player.matchId = null;
+    return false;
+  }
+
+  const youAre = findPlayerIndex(match, player.handle.id);
+  if (youAre === null) {
+    player.matchId = null;
+    return false;
+  }
+
+  const me = match.players[youAre];
+  const opponent = match.players[1 - youAre];
+  me.socketId = player.socket.id;
+  send(me, "match:start", buildMatchStartPayload(match, youAre));
+
+  if (match.status === "in_round") {
+    send(me, "match:roundStart", {
+      matchId: match.id,
+      roundIndex: match.roundIndex,
+      config: buildRoundConfig(match, match.roundIndex),
+      startAt: match.roundStartedAt,
+    });
+    send(me, "match:opponentScore", {
+      roundIndex: match.roundIndex,
+      ...opponent.liveScore,
+    });
+    if (me.result && !opponent.result) {
+      send(me, "match:spectateStart", {
+        roundIndex: match.roundIndex,
+        opponentName: opponent.handle.name,
+        events: opponent.cellLog.slice(),
+      });
+    }
+    return true;
+  }
+
+  if (match.status === "between_rounds") {
+    const r0 = match.players[0].result;
+    const r1 = match.players[1].result;
+    if (!r0 || !r1) return true;
+    const previousRound = Math.max(0, match.roundIndex - 1);
+    const winner = roundWinner(r0, r1);
+    send(me, "match:roundEnd", {
+      matchId: match.id,
+      roundIndex: previousRound,
+      yourResult: youAre === 0 ? r0 : r1,
+      opponentResult: youAre === 0 ? r1 : r0,
+      winner,
+      roundsWon: [match.roundsWon[0], match.roundsWon[1]],
+    });
+    return true;
+  }
+
+  return true;
 }
 
 function startRound(match: MatchSession): void {
@@ -268,6 +351,19 @@ function synthesizeTimeout(
 ): RoundResult {
   const live = match.players[playerIdx].liveScore;
   const config = buildRoundConfig(match, match.roundIndex);
+  const totalSafeCells = config.rows * config.cols - config.mines;
+  const clearPct =
+    totalSafeCells > 0
+      ? Math.max(0, Math.min(1, live.cellsRevealed / totalSafeCells))
+      : 0;
+  const mistakes = Math.max(
+    0,
+    (live.maxLives ?? MATCH_LIVES) - (live.lives ?? MATCH_LIVES),
+  );
+  const penalty =
+    mistakes <= 0
+      ? 0
+      : MISTAKE_PENALTY_FIRST + (mistakes - 1) * MISTAKE_PENALTY_EXTRA;
   const elapsedMs = Math.min(
     ROUND_TIME_MS,
     Date.now() - match.roundStartedAt,
@@ -287,8 +383,14 @@ function synthesizeTimeout(
       base: 0,
       combo: 0,
       speed: 0,
+      control: Math.round(CONTROL_FULL_BONUS * clearPct * clearPct),
+      penalty,
       peakStreak: live.liveStreak,
+      peakAccuracyStreak: live.accuracyStreak ?? 0,
       peakMultiplier: live.liveMultiplier,
+      peakSpeedMultiplier: live.liveSpeedMultiplier ?? 1,
+      peakAccuracyMultiplier: live.liveAccuracyMultiplier ?? 1,
+      mistakes,
       total: live.total,
     },
     actions: [],
@@ -383,6 +485,11 @@ function endMatch(match: MatchSession, reason: MatchEndPayload["reason"]): void 
     reason,
   };
   for (const p of match.players) send(p, "match:end", payload);
+
+  for (const p of match.players) {
+    const connected = getPlayer(p.handle.id);
+    if (connected?.matchId === match.id) connected.matchId = null;
+  }
 
   removeMatch(match.id);
 }

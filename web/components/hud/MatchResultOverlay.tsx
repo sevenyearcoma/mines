@@ -1,12 +1,14 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
 import { useEffect } from "react";
 import type { RoundResult } from "@/lib/engine";
 import type { MatchSnapshot } from "@/lib/store/match";
 import type { RoundEndPayload } from "@/lib/multiplayer/protocol";
 import { fmtTime } from "@/lib/format";
 import { capture } from "@/lib/analytics/posthog";
+import { useMascotPose } from "@/components/mascot/MascotRail";
 import { HudReadout } from "../primitives/HudReadout";
 import { Ornament } from "../primitives/Ornament";
 
@@ -16,12 +18,16 @@ export function MatchResultOverlay({
   roundEnd,
   snapshot,
   matchComplete,
+  demoHref,
+  demoLinks = [],
   onFindAnother,
   onLeave,
 }: {
   roundEnd: RoundEndPayload | null;
   snapshot: MatchSnapshot | null;
   matchComplete: boolean;
+  demoHref?: string | null;
+  demoLinks?: Array<{ label: string; href: string }>;
   onFindAnother: () => void;
   onLeave: () => void;
 }) {
@@ -41,6 +47,8 @@ export function MatchResultOverlay({
       your_score_base: roundEnd.yourResult.score.base,
       your_score_combo: roundEnd.yourResult.score.combo,
       your_score_speed: roundEnd.yourResult.score.speed,
+      your_score_control: roundEnd.yourResult.score.control,
+      your_score_penalty: roundEnd.yourResult.score.penalty,
       your_peak_multiplier: roundEnd.yourResult.score.peakMultiplier,
       your_peak_speed_multiplier: roundEnd.yourResult.score.peakSpeedMultiplier,
       your_peak_accuracy_multiplier:
@@ -66,6 +74,12 @@ export function MatchResultOverlay({
   }, [matchComplete, snapshot]);
 
   if (!snapshot) return null;
+  const replayLinks =
+    matchComplete && demoLinks.length > 0
+      ? demoLinks
+      : demoHref
+        ? [{ label: "watch demo", href: demoHref }]
+        : [];
 
   return (
     <AnimatePresence>
@@ -125,6 +139,11 @@ export function MatchResultOverlay({
                 flexWrap: "wrap",
               }}
             >
+              {replayLinks.map((link) => (
+                <Link key={link.href} className="btn btn-ghost" href={link.href}>
+                  {link.label}
+                </Link>
+              ))}
               {matchComplete ? (
                 <>
                   <button
@@ -167,6 +186,14 @@ function RoundEndHeader({
   const youWon = roundEnd.winner === snapshot.youAre;
   const tie = roundEnd.winner === null;
   const label = tie ? "DRAW" : youWon ? "ROUND WIN" : "ROUND LOSS";
+  useMascotPose(
+    tie ? "chipCount" : youWon ? "approve" : "wince",
+    tie
+      ? "even money on this one"
+      : youWon
+        ? "clean round. press the edge."
+        : "expensive click. watch the replay.",
+  );
   return (
     <>
       <Ornament w={120} color={youWon ? "var(--gold)" : "var(--red)"} />
@@ -210,6 +237,14 @@ function MatchCompleteHeader({ snapshot }: { snapshot: MatchSnapshot }) {
   const tie = snapshot.winner === null;
   const label = tie ? "DRAW" : youWon ? "VICTORY" : "DEFEAT";
   const forfeit = snapshot.endReason === "forfeit";
+  useMascotPose(
+    tie ? "chipCount" : youWon ? "allIn" : "wince",
+    tie
+      ? "the table stayed level"
+      : youWon
+        ? "that is how you close a table"
+        : "cash out the lesson, then run it back",
+  );
   return (
     <>
       <Ornament w={120} color={youWon ? "var(--gold)" : "var(--red)"} />
@@ -337,6 +372,16 @@ function PlayerColumn({
           label="speed"
           value={`+${result.score.speed}`}
           tone={result.score.speed > 0 ? "green" : "red"}
+        />
+        <HudReadout
+          label="control"
+          value={`+${result.score.control}`}
+          tone={result.score.control > 0 ? "green" : "gold"}
+        />
+        <HudReadout
+          label="penalty"
+          value={result.score.penalty > 0 ? `-${result.score.penalty}` : 0}
+          tone={result.score.penalty > 0 ? "red" : "green"}
         />
         <HudReadout
           label="peak"

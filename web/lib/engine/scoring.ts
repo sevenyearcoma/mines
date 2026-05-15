@@ -12,6 +12,8 @@ import type { RoundEndReason, ScoreBreakdown } from "./types";
 //   * Mine hits are mistakes: they reset both combo lanes, cost HP, and stun
 //     input. The round only ends after the last life is lost.
 //   * Speed bonus is realised at round end, only on a clean win.
+//   * Board control and mistake penalties make random mine-chasing lose to
+//     consistent logic even when the random player high-rolls a large island.
 export const SCORE_CONSTANTS = {
   BASE_PER_OPEN: 10,
 
@@ -20,9 +22,10 @@ export const SCORE_CONSTANTS = {
   SPEED_GROWTH_FAST: 0.12,
   SPEED_GROWTH_STEADY: 0.06,
   COMBO_THRESHOLD: 4,
-  SPEED_COMBO_BUMP: 0.5,
-  SPEED_COMBO_BUMP_PER_EXTRA_CELL: 0.04,
-  SPEED_COMBO_BUMP_MAX: 1.35,
+  SPEED_COMBO_BUMP: 0.18,
+  SPEED_COMBO_BUMP_PER_EXTRA_CELL: 0.015,
+  SPEED_COMBO_BUMP_MAX: 0.45,
+  CASCADE_STREAK_GATE: 3,
   SPEED_MILESTONE_EVERY: 5,
   SPEED_MILESTONE_BUMP: 0.15,
   SPEED_MAX_MULTIPLIER: 3.0,
@@ -32,11 +35,14 @@ export const SCORE_CONSTANTS = {
   ACCURACY_CASCADE_BUMP_MAX: 0.12,
   ACCURACY_MAX_MULTIPLIER: 3.0,
 
-  MAX_LIVES: 3,
+  MAX_LIVES: 2,
   MISTAKE_STUN_MS: 3000,
 
   SPEED_FULL_BONUS: 2000,
   SPEED_DECAY_MS: 120_000,
+  CONTROL_FULL_BONUS: 1200,
+  MISTAKE_PENALTY_FIRST: 300,
+  MISTAKE_PENALTY_EXTRA: 550,
 } as const;
 
 export interface ScoreState {
@@ -163,6 +169,7 @@ export function applyRevealWithFeedback(
     SPEED_COMBO_BUMP,
     SPEED_COMBO_BUMP_PER_EXTRA_CELL,
     SPEED_COMBO_BUMP_MAX,
+    CASCADE_STREAK_GATE,
     SPEED_MILESTONE_EVERY,
     SPEED_MILESTONE_BUMP,
     SPEED_MAX_MULTIPLIER,
@@ -182,7 +189,8 @@ export function applyRevealWithFeedback(
     : state.speedMultiplier + (gap <= SPEED_FAST_MS ? SPEED_GROWTH_FAST : SPEED_GROWTH_STEADY);
 
   let speedCascadeBonus = 0;
-  if (revealedCount >= COMBO_THRESHOLD) {
+  const cascadeEligible = state.accuracyStreak >= CASCADE_STREAK_GATE;
+  if (cascadeEligible && revealedCount >= COMBO_THRESHOLD) {
     speedCascadeBonus = Math.min(
       SPEED_COMBO_BUMP_MAX,
       SPEED_COMBO_BUMP +
@@ -355,8 +363,16 @@ export function finalizeScore(
   state: ScoreState,
   elapsedMs: number,
   reason: RoundEndReason,
+  safeRevealed = 0,
+  totalSafeCells = 0,
 ): ScoreBreakdown {
-  const { SPEED_FULL_BONUS, SPEED_DECAY_MS } = SCORE_CONSTANTS;
+  const {
+    CONTROL_FULL_BONUS,
+    MISTAKE_PENALTY_EXTRA,
+    MISTAKE_PENALTY_FIRST,
+    SPEED_FULL_BONUS,
+    SPEED_DECAY_MS,
+  } = SCORE_CONSTANTS;
 
   const base = state.rawPoints;
   const combo = Math.max(0, state.earnedPoints - state.rawPoints);
@@ -367,11 +383,21 @@ export function finalizeScore(
           Math.round(SPEED_FULL_BONUS * (1 - elapsedMs / SPEED_DECAY_MS)),
         )
       : 0;
-  const total = Math.max(0, base + combo + speed);
+  const clearPct =
+    totalSafeCells > 0 ? clamp(safeRevealed / totalSafeCells, 0, 1) : 0;
+  const control = Math.round(CONTROL_FULL_BONUS * clearPct * clearPct);
+  const penalty =
+    state.mistakes <= 0
+      ? 0
+      : MISTAKE_PENALTY_FIRST +
+        (state.mistakes - 1) * MISTAKE_PENALTY_EXTRA;
+  const total = Math.max(0, base + combo + speed + control - penalty);
   return {
     base,
     combo,
     speed,
+    control,
+    penalty,
     peakStreak: state.peakStreak,
     peakAccuracyStreak: state.peakAccuracyStreak,
     peakMultiplier: state.peakMultiplier,

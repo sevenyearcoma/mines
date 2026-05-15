@@ -11,15 +11,62 @@ import {
 import type { Session, User } from "@supabase/supabase-js";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/types/db";
+import { detectCountryFromBrowser, isIso2 } from "@/lib/leaderboard/country";
 import { capture, identify, resetAnalytics } from "@/lib/analytics/posthog";
+
+export type GuestIdentity = { id: string; name: string };
 
 type AuthContextValue = {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  guest: GuestIdentity | null;
+  isGuest: boolean;
+  displayName: string | null;
   loading: boolean;
+  signInAsGuest: (name: string) => GuestIdentity;
   signOut: () => Promise<void>;
 };
+
+const GUEST_KEY = "mines.guest";
+
+function readGuest(): GuestIdentity | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(GUEST_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<GuestIdentity>;
+    if (typeof parsed.id !== "string" || typeof parsed.name !== "string") return null;
+    return { id: parsed.id, name: parsed.name };
+  } catch {
+    return null;
+  }
+}
+
+function writeGuest(g: GuestIdentity) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(GUEST_KEY, JSON.stringify(g));
+  } catch {
+    // quota / disabled storage — best effort.
+  }
+}
+
+function clearGuest() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(GUEST_KEY);
+  } catch {
+    // best effort.
+  }
+}
+
+function newGuestId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -27,7 +74,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = getBrowserSupabase();
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [guest, setGuest] = useState<GuestIdentity | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setGuest(readGuest());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +94,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       (event: string, s: Session | null) => {
         setSession(s);
         if (event === "SIGNED_IN" && s?.user) {
+          // A real sign-in supersedes any guest identity.
+          clearGuest();
+          setGuest(null);
           identify(s.user.id, {
             email: s.user.email,
             provider: s.user.app_metadata?.provider,
@@ -75,27 +130,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select("*")
       .eq("id", uid)
       .maybeSingle()
-      .then(({ data }: { data: unknown }) => {
-        if (!cancelled) setProfile((data as Profile) ?? null);
+      .then(async ({ data }: { data: unknown }) => {
+        if (cancelled) return;
+        const p = (data as Profile | null) ?? null;
+        setProfile(p);
+        if (p && !isIso2(p.country)) {
+          const detected = detectCountryFromBrowser();
+          if (detected) {
+            const { data: updated } = await supabase
+              .from("profiles")
+              .update({ country: detected })
+              .eq("id", uid)
+              .select()
+              .maybeSingle();
+            if (!cancelled && updated) setProfile(updated as Profile);
+          }
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [session?.user?.id, supabase]);
 
+  const signInAsGuest = useCallback((name: string): GuestIdentity => {
+    const trimmed = name.trim().slice(0, 20) || "guest";
+    const next: GuestIdentity = { id: newGuestId(), name: trimmed };
+    writeGuest(next);
+    setGuest(next);
+    capture("guest_signed_in", { name: trimmed });
+    return next;
+  }, []);
+
   const signOut = useCallback(async () => {
+    clearGuest();
+    setGuest(null);
     await supabase.auth.signOut();
   }, [supabase]);
+
+  const user = session?.user ?? null;
+  const isGuest = !user && guest !== null;
+  const displayName =
+    profile?.username ??
+    user?.email?.split("@")[0] ??
+    guest?.name ??
+    null;
 
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
-      user: session?.user ?? null,
+      user,
       profile,
+      guest: user ? null : guest,
+      isGuest,
+      displayName,
       loading,
+      signInAsGuest,
       signOut,
     }),
-    [session, profile, loading, signOut],
+    [session, user, profile, guest, isGuest, displayName, loading, signInAsGuest, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

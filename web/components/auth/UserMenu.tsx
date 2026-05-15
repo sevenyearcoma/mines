@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "./AuthProvider";
 
 export function UserMenu() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, guest, isGuest, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -18,10 +18,14 @@ export function UserMenu() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  if (!user) return null;
+  if (!user && !isGuest) return null;
 
-  const name = profile?.username ?? user.email?.split("@")[0] ?? "player";
+  const name = user
+    ? profile?.username ?? user.email?.split("@")[0] ?? "player"
+    : guest?.name ?? "guest";
   const initial = name.charAt(0).toUpperCase();
+  const ringColor = isGuest ? "#8c7e57" : "var(--gold)";
+  const ringText = isGuest ? "#1a1812" : "#1a1206";
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
@@ -42,8 +46,8 @@ export function UserMenu() {
             width: 24,
             height: 24,
             borderRadius: "50%",
-            background: "var(--gold)",
-            color: "#1a1206",
+            background: ringColor,
+            color: ringText,
             display: "grid",
             placeItems: "center",
             fontWeight: 800,
@@ -55,6 +59,19 @@ export function UserMenu() {
         </span>
         <span className="mono" style={{ fontSize: 12 }}>
           {name}
+          {isGuest && (
+            <span
+              className="mono upper"
+              style={{
+                marginLeft: 6,
+                fontSize: 9,
+                letterSpacing: "0.18em",
+                color: "var(--ink-mute)",
+              }}
+            >
+              guest
+            </span>
+          )}
         </span>
       </button>
 
@@ -65,7 +82,7 @@ export function UserMenu() {
             position: "absolute",
             top: "calc(100% + 6px)",
             right: 0,
-            minWidth: 180,
+            minWidth: 200,
             padding: 6,
             zIndex: 60,
             display: "flex",
@@ -86,6 +103,22 @@ export function UserMenu() {
           >
             profile
           </Link>
+          {isGuest && (
+            <Link
+              href="/auth/sign-in"
+              className="btn btn-ghost"
+              onClick={() => setOpen(false)}
+              style={{
+                justifyContent: "flex-start",
+                padding: "8px 10px",
+                fontSize: 12,
+                border: "none",
+                color: "var(--gold)",
+              }}
+            >
+              sign up to save
+            </Link>
+          )}
           <button
             type="button"
             className="btn btn-ghost"
@@ -101,7 +134,7 @@ export function UserMenu() {
               textAlign: "left",
             }}
           >
-            sign out
+            {isGuest ? "leave the table" : "sign out"}
           </button>
         </div>
       )}

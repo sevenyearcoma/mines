@@ -16,6 +16,7 @@ export interface ConnectedPlayer {
   handle: PlayerHandle;
   inQueue: boolean;
   matchId: string | null;
+  disconnectTimer: NodeJS.Timeout | null;
 }
 
 export interface MatchPlayerState {

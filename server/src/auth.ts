@@ -21,7 +21,25 @@ export class AuthError extends Error {
   }
 }
 
-export async function authenticate(token: string | undefined): Promise<PlayerHandle> {
+const GUEST_NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,20}$/;
+
+export async function authenticate(
+  auth: Record<string, unknown> | undefined,
+): Promise<PlayerHandle> {
+  if (!auth) throw new AuthError("no_auth", "Missing handshake auth");
+
+  if (auth.guest === true) {
+    const guestId = typeof auth.guestId === "string" ? auth.guestId : "";
+    const guestName = typeof auth.guestName === "string" ? auth.guestName : "";
+    if (!guestId) throw new AuthError("invalid_guest", "Missing guest id");
+    const safeName = guestName.trim();
+    if (!GUEST_NAME_PATTERN.test(safeName)) {
+      throw new AuthError("invalid_guest", "Invalid guest name");
+    }
+    return { id: `guest:${guestId}`, name: safeName };
+  }
+
+  const token = typeof auth.token === "string" ? auth.token : undefined;
   if (!token) throw new AuthError("no_token", "Missing auth token");
   if (!supabase) throw new AuthError("misconfigured", "Server missing Supabase config");
 

@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { roundConfigFromDifficulty, type RoundConfig } from "@/lib/engine";
+import { GAME_AUDIO_SAMPLES } from "../audio/samples";
 
 export default class PreloadScene extends Phaser.Scene {
   private initialRound: RoundConfig = roundConfigFromDifficulty("intermediate");
@@ -13,9 +14,9 @@ export default class PreloadScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.audio("snd-reveal", "/assets/audio/open_tiles.ogg");
-    this.load.audio("snd-flag", "/assets/audio/flag.ogg");
-    this.load.audio("snd-loss", "/assets/audio/loss.ogg");
+    for (const sample of GAME_AUDIO_SAMPLES) {
+      this.load.audio(sample.key, sample.url);
+    }
   }
 
   create() {
