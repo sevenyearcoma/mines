@@ -122,3 +122,5 @@ $RECYCLE.BIN/
 !/supabase/migrations/*.sql
 /supabase/.temp/
 .env.local
+
+.vercel
