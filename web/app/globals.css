@@ -180,6 +180,18 @@ body::before {
     box-shadow: inset 0 1px 0 var(--tile-edge-hi), inset 0 -1px 0 var(--tile-edge-lo) !important;
     transition: none !important;
   }
+
+  /* Drop the gold-foil drop-shadow chain — `filter: drop-shadow(...)` is
+     real GPU compositor time on mobile. The gradient still reads gold. */
+  .foil,
+  .foil-deep {
+    filter: none !important;
+    text-shadow: none !important;
+  }
+  .glow-gold,
+  .glow-red {
+    text-shadow: none !important;
+  }
 }
 
 /* Respect user OS preference for reduced motion, anywhere. */
@@ -706,6 +718,14 @@ body::before {
 }
 .play-board-stage canvas {
   touch-action: none;
+}
+
+/* Mobile-only difficulty + new-board row. Lives below .play-hud and hosts the
+   controls iOS Safari refused to tap inside the wrap-flex HUD. Hidden on
+   desktop where the inline controls inside .play-hud-desktop-controls work
+   fine. */
+.play-difficulty-row {
+  display: none;
 }
 
 /* utility */
@@ -1371,20 +1391,34 @@ body::before {
     font-size: 22px !important;
   }
 
-  /* Difficulty tabs are the most-tapped control on the play screen on mobile —
-     surface them on their own row at a real 44px tap-target height with a
-     clear active state. */
-  .play-difficulty-tabs {
-    order: 5;
-    flex: 1 1 100% !important;
+  /* Hide the inline desktop controls — on mobile they live in their own
+     row to dodge iOS Safari's flex-wrap + order tap-target bugs. */
+  .play-hud-desktop-controls {
+    display: none !important;
+  }
+
+  /* Mobile difficulty + new-board row. Guaranteed visible, no wrap, no
+     order rules, no stacking surprises. */
+  .play-difficulty-row {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line-soft);
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), transparent);
+    position: relative;
+    z-index: 3;
+  }
+
+  .play-difficulty-row .play-difficulty-tabs {
+    flex: 1 1 0 !important;
     min-width: 0;
-    justify-content: space-between;
     padding: 4px !important;
     background: rgba(0, 0, 0, 0.55) !important;
     border-radius: 8px !important;
   }
 
-  .play-difficulty-tabs button {
+  .play-difficulty-row .play-difficulty-btn {
     flex: 1 1 0;
     min-height: 44px !important;
     padding: 12px 8px !important;
@@ -1393,8 +1427,7 @@ body::before {
     border-radius: 6px !important;
   }
 
-  .play-new-button {
-    order: 6;
+  .play-difficulty-row .play-new-button {
     flex: 0 0 auto;
     min-height: 44px;
     padding: 10px 16px !important;
@@ -1528,7 +1561,7 @@ body::before {
     padding: 5px 7px !important;
   }
 
-  .play-difficulty-tabs button {
+  .play-difficulty-row .play-difficulty-btn {
     letter-spacing: 0.12em !important;
     font-size: 11px !important;
     padding: 11px 6px !important;

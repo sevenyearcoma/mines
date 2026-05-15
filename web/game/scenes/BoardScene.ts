@@ -99,10 +99,13 @@ export default class BoardScene extends Phaser.Scene {
   private lastProgressEmitAt = 0;
   // Visual overlay shown during the post-mistake stun. Holds every transient
   // object so a round reset / scene shutdown can rip them out cleanly.
+  // `tweens` can hold `null` entries because `safeTween()` returns null on
+  // low-end devices where the tween was skipped — the array slot is still
+  // pushed so push/destroy book-keeping stays in step with the desktop path.
   private stunFx: {
     objects: Phaser.GameObjects.GameObject[];
     timers: Phaser.Time.TimerEvent[];
-    tweens: Phaser.Tweens.Tween[];
+    tweens: (Phaser.Tweens.Tween | null)[];
     sparkTimer?: Phaser.Time.TimerEvent;
   } | null = null;
 
@@ -114,6 +117,33 @@ export default class BoardScene extends Phaser.Scene {
 
   constructor() {
     super({ key: "BoardScene" });
+  }
+
+  /**
+   * Tween wrapper that no-ops on low-end devices. The tween's `onComplete`
+   * still fires synchronously so cleanup code (sprite.destroy, etc.) runs
+   * exactly as it would post-animation. Returns null on low-end, the tween
+   * otherwise. Use this everywhere except per-cell reveal tweens (which
+   * skip more aggressively, inline).
+   */
+  private safeTween(
+    config: Phaser.Types.Tweens.TweenBuilderConfig,
+  ): Phaser.Tweens.Tween | null {
+    if (this.lowEnd) {
+      const oc = config.onComplete as
+        | ((...args: unknown[]) => void)
+        | undefined;
+      if (typeof oc === "function") {
+        try {
+          oc();
+        } catch {
+          // best effort — cleanup should never throw, but if it does we
+          // don't want to crash the scene
+        }
+      }
+      return null;
+    }
+    return this.tweens.add(config);
   }
 
   init(data: {
@@ -176,9 +206,11 @@ export default class BoardScene extends Phaser.Scene {
       if (this.round.mode === "casual") this.resetBoard();
     });
 
-    // 4 fps stats tick for the React HUD (also drives timer enforcement)
+    // Stats tick for the React HUD (also drives timer enforcement).
+    // 4 FPS on desktop, 2 FPS on mobile — the HUD readouts (mines/time/opens)
+    // are basically static between ticks, the user can't tell.
     this.statsTimer = this.time.addEvent({
-      delay: 250,
+      delay: this.lowEnd ? 500 : 250,
       loop: true,
       callback: () => this.tick(),
     });
@@ -822,7 +854,7 @@ export default class BoardScene extends Phaser.Scene {
       t.isFlagged = true;
       // plant animation
       t.flag.setScale(0.4);
-      this.tweens.add({
+      this.safeTween({
         targets: t.flag,
         scale: 1,
         ease: "Back.Out",
@@ -967,7 +999,7 @@ export default class BoardScene extends Phaser.Scene {
         t.number.setScale(1);
       } else {
         t.number.setScale(0.001);
-        this.tweens.add({
+        this.safeTween({
           targets: t.number,
           scale: 1,
           ease: "Back.Out",
@@ -980,7 +1012,7 @@ export default class BoardScene extends Phaser.Scene {
       t.reveal.setScale(1);
     } else {
       t.reveal.setScale(0.84);
-      this.tweens.add({
+      this.safeTween({
         targets: t.reveal,
         scale: 1,
         ease: "Back.Out",
@@ -1005,7 +1037,7 @@ export default class BoardScene extends Phaser.Scene {
       const size = 3 + Math.random() * 3;
       const p = this.add.circle(cx, cy, size, 0xe3b248, 1);
       p.setBlendMode(Phaser.BlendModes.ADD);
-      this.tweens.add({
+      this.safeTween({
         targets: p,
         x: cx + dx,
         y: cy + dy,
@@ -1077,7 +1109,7 @@ export default class BoardScene extends Phaser.Scene {
       .setBlendMode(Phaser.BlendModes.ADD);
 
     text.setScale(0.7);
-    this.tweens.add({
+    this.safeTween({
       targets: text,
       y: y - 26 - feedback.tier * 5,
       scale: 1.15,
@@ -1106,7 +1138,7 @@ export default class BoardScene extends Phaser.Scene {
       const p = this.add.circle(cx, cy, size, colors[i % colors.length], 1);
       p.setDepth(70);
       p.setBlendMode(Phaser.BlendModes.ADD);
-      this.tweens.add({
+      this.safeTween({
         targets: p,
         x: cx + dx,
         y: cy + dy,
@@ -1141,13 +1173,15 @@ export default class BoardScene extends Phaser.Scene {
 
     const objects: Phaser.GameObjects.GameObject[] = [];
     const timers: Phaser.Time.TimerEvent[] = [];
-    const tweens: Phaser.Tweens.Tween[] = [];
+    // Can hold nulls — safeTween returns null on low-end where the tween
+    // was skipped. clearStunFx() handles the nulls.
+    const tweens: (Phaser.Tweens.Tween | null)[] = [];
 
     // 1. Dim wash — knocks the grid back so the player feels locked out.
     const wash = this.add.rectangle(cx, cy, fw, fh, 0x230808, 0).setDepth(55);
     objects.push(wash);
     tweens.push(
-      this.tweens.add({
+      this.safeTween({
         targets: wash,
         alpha: 0.55,
         duration: 140,
@@ -1169,7 +1203,7 @@ export default class BoardScene extends Phaser.Scene {
     objects.push(frame);
     const frameState = { a: 0.9, i: 0 };
     tweens.push(
-      this.tweens.add({
+      this.safeTween({
         targets: frameState,
         a: 0.4,
         i: 3,
@@ -1213,7 +1247,7 @@ export default class BoardScene extends Phaser.Scene {
         cracks.setAlpha(0);
         objects.push(cracks);
         tweens.push(
-          this.tweens.add({
+          this.safeTween({
             targets: cracks,
             alpha: 1,
             scale: { from: 0.6, to: 1 },
@@ -1240,7 +1274,7 @@ export default class BoardScene extends Phaser.Scene {
     label.setScale(0.4);
     objects.push(label);
     tweens.push(
-      this.tweens.add({
+      this.safeTween({
         targets: label,
         scale: 1,
         duration: 240,
@@ -1248,7 +1282,7 @@ export default class BoardScene extends Phaser.Scene {
       }),
     );
     tweens.push(
-      this.tweens.add({
+      this.safeTween({
         targets: label,
         alpha: { from: 1, to: 0.7 },
         duration: 520,
@@ -1278,7 +1312,7 @@ export default class BoardScene extends Phaser.Scene {
       countdown.setScale(0.001);
       countdown.setAlpha(1);
       tweens.push(
-        this.tweens.add({
+        this.safeTween({
           targets: countdown,
           scale: 1,
           duration: 220,
@@ -1286,7 +1320,7 @@ export default class BoardScene extends Phaser.Scene {
         }),
       );
       tweens.push(
-        this.tweens.add({
+        this.safeTween({
           targets: countdown,
           alpha: 0.55,
           duration: 800,
@@ -1319,7 +1353,7 @@ export default class BoardScene extends Phaser.Scene {
                 .circle(bx, by, 2 + Math.random() * 2, 0xffb4b4, 1)
                 .setDepth(73)
                 .setBlendMode(Phaser.BlendModes.ADD);
-              this.tweens.add({
+              this.safeTween({
                 targets: p,
                 x: bx + Math.cos(angle) * dist,
                 y: by + Math.sin(angle) * dist,
@@ -1360,7 +1394,7 @@ export default class BoardScene extends Phaser.Scene {
       .rectangle(cx, cy, fw, fh, 0xffe4e4, 0.65)
       .setDepth(80)
       .setBlendMode(Phaser.BlendModes.ADD);
-    this.tweens.add({
+    this.safeTween({
       targets: flash,
       alpha: 0,
       duration: 220,
@@ -1374,7 +1408,7 @@ export default class BoardScene extends Phaser.Scene {
   private clearStunFx() {
     this.setDefaultCursor("pointer");
     if (!this.stunFx) return;
-    for (const tw of this.stunFx.tweens) tw.stop();
+    for (const tw of this.stunFx.tweens) tw?.stop();
     for (const tm of this.stunFx.timers) tm.remove(false);
     this.stunFx.sparkTimer?.remove(false);
     for (const o of this.stunFx.objects) o.destroy();
@@ -1412,7 +1446,7 @@ export default class BoardScene extends Phaser.Scene {
       .setDepth(90)
       .setBlendMode(Phaser.BlendModes.ADD);
 
-    this.tweens.add({
+    this.safeTween({
       targets: text,
       y: y - 34,
       scale: 1.12,
@@ -1428,7 +1462,7 @@ export default class BoardScene extends Phaser.Scene {
       const p = this.add.circle(x, y + this.size * 0.35, 3 + Math.random() * 3, 0xff4d4d, 1);
       p.setDepth(75);
       p.setBlendMode(Phaser.BlendModes.ADD);
-      this.tweens.add({
+      this.safeTween({
         targets: p,
         x: x + Math.cos(angle) * dist,
         y: y + this.size * 0.35 + Math.sin(angle) * dist,
@@ -1465,7 +1499,7 @@ export default class BoardScene extends Phaser.Scene {
         if (hintSet.has(r * this.cols + c)) {
           this.drawHint(t.hint, this.size);
           t.hint.setVisible(true);
-          this.tweens.add({
+          this.safeTween({
             targets: t.hint,
             alpha: { from: 0.6, to: 1 },
             duration: 700,
@@ -1911,7 +1945,7 @@ export default class BoardScene extends Phaser.Scene {
       t.number.setColor(NUM_COLORS[adj] ?? "#fff");
       t.number.setVisible(true);
       t.number.setScale(0.001);
-      this.tweens.add({
+      this.safeTween({
         targets: t.number,
         scale: 1,
         ease: "Back.Out",
@@ -1919,7 +1953,7 @@ export default class BoardScene extends Phaser.Scene {
       });
     }
     t.reveal.setScale(0.84);
-    this.tweens.add({
+    this.safeTween({
       targets: t.reveal,
       scale: 1,
       ease: "Back.Out",
@@ -1936,7 +1970,7 @@ export default class BoardScene extends Phaser.Scene {
       t.cover.setVisible(false);
       t.isFlagged = true;
       t.flag.setScale(0.4);
-      this.tweens.add({
+      this.safeTween({
         targets: t.flag,
         scale: 1,
         ease: "Back.Out",
