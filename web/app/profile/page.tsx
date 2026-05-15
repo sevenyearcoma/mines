@@ -9,6 +9,7 @@ import {
   RecentRuns,
   type RecentMatchRow,
 } from "@/components/profile/RecentRuns";
+import { ProGate } from "@/components/pro/ProGate";
 
 export const dynamic = "force-dynamic";
 
@@ -165,7 +166,12 @@ export default async function ProfilePage() {
       />
       <ProfileHero profile={profile} />
       <StatsTriptych profile={profile} />
-      <DeepCuts games={allGames} />
+      <ProGate
+        title="Deep cuts on your action logs"
+        body="Insight cards, decision-speed bars, win-rate breakdowns, boom heatmap, and ranked tells pulled from every game you've logged."
+      >
+        <DeepCuts games={allGames} />
+      </ProGate>
       <RecentRuns matches={pvpMatches} games={games} />
     </main>
   );

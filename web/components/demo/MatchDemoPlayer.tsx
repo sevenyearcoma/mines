@@ -8,18 +8,60 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { detectCoach } from "@/lib/coach/detect";
+import type { CoachReport, PatternMatch } from "@/lib/coach/types";
 import { frameAt, indexForMs, totalMs } from "@/lib/demo/playback";
 import type { Demo, MatchDemo } from "@/lib/demo/types";
 import { fmtTime } from "@/lib/format";
 import { countryName, flagEmoji } from "@/lib/leaderboard/country";
 import { type MascotPose } from "@/components/mascot/MinosMascot";
 import { useMascotPose } from "@/components/mascot/MascotRail";
+import { useProMode } from "@/components/pro/ProProvider";
+import { CoachTipStrip } from "./CoachTipStrip";
 import { DemoBoard } from "./DemoBoard";
+
+const COACH_STORAGE_KEY = "mines:demo:coach";
+
+// Picks the pattern most relevant to the player's most recent action — anchor
+// hit > conclusion hit > nearest by Manhattan distance > first match.
+function pickPrimary(
+  report: CoachReport | null,
+  lastAction: { r: number; c: number } | null,
+): PatternMatch | null {
+  if (!report || report.patterns.length === 0) return null;
+  if (!lastAction) return report.patterns[0];
+  const { r: lr, c: lc } = lastAction;
+
+  const anchorHit = report.patterns.find((p) =>
+    p.anchors.some((a) => a.r === lr && a.c === lc),
+  );
+  if (anchorHit) return anchorHit;
+
+  const concHit = report.patterns.find((p) =>
+    p.conclusions.some((c) => c.r === lr && c.c === lc),
+  );
+  if (concHit) return concHit;
+
+  let best = report.patterns[0];
+  let bestDist = Infinity;
+  for (const p of report.patterns) {
+    const dist = p.anchors.reduce((acc, a) => {
+      const d = Math.abs(a.r - lr) + Math.abs(a.c - lc);
+      return d < acc ? d : acc;
+    }, Infinity);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = p;
+    }
+  }
+  return best;
+}
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4] as const;
 type Speed = (typeof SPEEDS)[number];
 
 export function MatchDemoPlayer({ demo }: { demo: MatchDemo }) {
+  const { isPro } = useProMode();
   const total = useMemo(
     () => Math.max(totalMs(demo.player0), totalMs(demo.player1)),
     [demo],
@@ -35,9 +77,28 @@ export function MatchDemoPlayer({ demo }: { demo: MatchDemo }) {
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<Speed>(1);
+  // Coach defaults to ON when Pro is enabled; flipping Pro off hard-disables.
+  const [coachPref, setCoachPref] = useState<boolean>(true);
+  const coachOn = isPro && coachPref;
   const lastTickRef = useRef<number | null>(null);
   const currentMsRef = useRef(currentMs);
   currentMsRef.current = currentMs;
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(COACH_STORAGE_KEY);
+      if (stored === "0") setCoachPref(false);
+    } catch {
+      // storage disabled — keep default
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COACH_STORAGE_KEY, coachPref ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [coachPref]);
 
   useEffect(() => {
     if (!playing) {
@@ -134,6 +195,16 @@ export function MatchDemoPlayer({ demo }: { demo: MatchDemo }) {
     () => frameAt(demo.player1, indexForMs(demo.player1, currentMs)),
     [currentMs, demo.player1],
   );
+
+  const coach0 = useMemo(
+    () => (coachOn ? detectCoach(frame0.board) : null),
+    [coachOn, frame0.board],
+  );
+  const coach1 = useMemo(
+    () => (coachOn ? detectCoach(frame1.board) : null),
+    [coachOn, frame1.board],
+  );
+
   const mascotPose = matchDemoPose(demo, currentMs, total);
   const mascotCaption = matchDemoCaption(demo, currentMs, total);
   useMascotPose(mascotPose, mascotCaption);
@@ -164,6 +235,9 @@ export function MatchDemoPlayer({ demo }: { demo: MatchDemo }) {
           }}
           onStep={stepBy}
           onSpeed={setSpeed}
+          showCoachToggle={isPro}
+          coachOn={coachOn}
+          onToggleCoach={() => setCoachPref((v) => !v)}
         />
       </div>
 
@@ -180,12 +254,14 @@ export function MatchDemoPlayer({ demo }: { demo: MatchDemo }) {
           frame={frame0}
           playerLabel="player 1"
           won={demo.winner === 0}
+          coach={coach0}
         />
         <PlayerReplay
           demo={demo.player1}
           frame={frame1}
           playerLabel="player 2"
           won={demo.winner === 1}
+          coach={coach1}
         />
       </div>
     </div>
@@ -202,6 +278,9 @@ function MatchControls({
   onRestart,
   onStep,
   onSpeed,
+  showCoachToggle,
+  coachOn,
+  onToggleCoach,
 }: {
   currentMs: number;
   totalMs: number;
@@ -212,6 +291,9 @@ function MatchControls({
   onRestart: () => void;
   onStep: (delta: number) => void;
   onSpeed: (speed: Speed) => void;
+  showCoachToggle: boolean;
+  coachOn: boolean;
+  onToggleCoach: () => void;
 }) {
   return (
     <div
@@ -302,6 +384,28 @@ function MatchControls({
             </button>
           ))}
         </div>
+        {showCoachToggle && (
+          <button
+            onClick={onToggleCoach}
+            className="mono upper"
+            title="Toggle AI coach for both replays"
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.16em",
+              padding: "8px 12px",
+              background: coachOn
+                ? "linear-gradient(180deg, var(--gold-glow), var(--gold))"
+                : "rgba(0,0,0,0.4)",
+              color: coachOn ? "#2a1d04" : "var(--ink-2)",
+              border: "1px solid var(--line-soft)",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
+            {coachOn ? "● coach on" : "○ coach"}
+          </button>
+        )}
         <div style={{ flex: 1 }} />
         <div
           className="mono"
@@ -324,11 +428,13 @@ function PlayerReplay({
   frame,
   playerLabel,
   won,
+  coach,
 }: {
   demo: Demo;
   frame: ReturnType<typeof frameAt>;
   playerLabel: string;
   won: boolean;
+  coach: CoachReport | null;
 }) {
   const lastAction =
     frame.actionIndex > 0 ? demo.actions[frame.actionIndex - 1] : null;
@@ -346,6 +452,18 @@ function PlayerReplay({
             : null;
         })()
       : null;
+
+  const primaryPattern = useMemo(
+    () => pickPrimary(coach, lastAction),
+    [coach, lastAction],
+  );
+  const patternCount = useMemo(() => {
+    if (!coach || !primaryPattern) return 0;
+    return (
+      coach.patterns.filter((p) => p.name === primaryPattern.name).length - 1
+    );
+  }, [coach, primaryPattern]);
+  const coachAnchors = primaryPattern?.anchors ?? [];
 
   return (
     <section
@@ -413,8 +531,14 @@ function PlayerReplay({
           cellSize={24}
           highlight={highlight}
           boomCell={boomCell}
+          coach={coach}
+          coachAnchors={coachAnchors}
         />
       </div>
+
+      {coach && (
+        <CoachTipStrip pattern={primaryPattern} patternCount={patternCount} />
+      )}
 
       <div
         className="mono"

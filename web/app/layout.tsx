@@ -3,10 +3,14 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { SiteHeader } from "@/components/auth/SiteHeader";
 import { MascotProvider, MascotRail } from "@/components/mascot/MascotRail";
+import { ProProvider } from "@/components/pro/ProProvider";
 
 export const metadata: Metadata = {
   title: "MINES",
   description: "A high-stakes minesweeper.",
+  // Favicon is auto-wired by Next.js via the App Router file convention —
+  // `web/app/icon.png` (sourced from web/assets/logo.png) gets injected as
+  // <link rel="icon"> automatically. No metadata.icons needed.
 };
 
 export default function RootLayout({
@@ -30,15 +34,17 @@ export default function RootLayout({
       </head>
       <body style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
         <AuthProvider>
-          <MascotProvider>
-            <div className="with-mascot-rail" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-              <SiteHeader />
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-                {children}
+          <ProProvider>
+            <MascotProvider>
+              <div className="with-mascot-rail" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+                <SiteHeader />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+                  {children}
+                </div>
               </div>
-            </div>
-            <MascotRail />
-          </MascotProvider>
+              <MascotRail />
+            </MascotProvider>
+          </ProProvider>
         </AuthProvider>
       </body>
     </html>

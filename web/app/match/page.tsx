@@ -11,6 +11,8 @@ import { MatchResultOverlay } from "@/components/hud/MatchResultOverlay";
 import { MiniBoard } from "@/components/hud/MiniBoard";
 import { MatchDemoRecorder } from "@/components/demo/MatchDemoRecorder";
 import { useMascotPose } from "@/components/mascot/MascotRail";
+import { ServerStatusCard } from "@/components/multiplayer/ServerStatusCard";
+import type { ConnectionState } from "@/lib/multiplayer/socket";
 import { capture } from "@/lib/analytics/posthog";
 import { matchDemoId } from "@/lib/demo/types";
 import {
@@ -36,8 +38,18 @@ export default function MatchPage() {
 }
 
 function MatchPageInner() {
-  const { user, guest, isGuest, loading } = useAuth();
+  const { user, guest, isGuest, loading, signInAsAutoGuest } = useAuth();
   const myId = user?.id ?? guest?.id ?? "";
+
+  // First-time visitors land at /match anonymously — auto-create a guest so
+  // they go straight to the lobby. They can rename via UserMenu later. Same
+  // pattern protects /daily and /play implicitly (those allow null user).
+  useEffect(() => {
+    if (loading) return;
+    if (user) return;
+    if (isGuest) return;
+    signInAsAutoGuest();
+  }, [loading, user, isGuest, signInAsAutoGuest]);
   const { stats } = useGameStats();
   const search = useSearchParams();
   const inviteToken = search.get("invite");
@@ -61,7 +73,9 @@ function MatchPageInner() {
     errorMessage,
     invite,
     challenge,
+    connectionState,
     findMatch,
+    retryConnection,
     cancelSearch,
     leaveMatch,
     createInvite,
@@ -154,6 +168,8 @@ function MatchPageInner() {
             myId={myId}
             invite={invite}
             error={errorMessage}
+            connectionState={connectionState}
+            onRetryConnection={retryConnection}
             onFindMatch={() => {
               capture("match_search_started");
               findMatch();
@@ -246,6 +262,8 @@ function Lobby({
   myId,
   invite,
   error,
+  connectionState,
+  onRetryConnection,
   onFindMatch,
   onCreateInvite,
   onCancelInvite,
@@ -256,6 +274,8 @@ function Lobby({
   myId: string;
   invite: InviteState;
   error: string | null;
+  connectionState: ConnectionState;
+  onRetryConnection: () => void;
   onFindMatch: () => void;
   onCreateInvite: () => void;
   onCancelInvite: () => void;
@@ -264,6 +284,7 @@ function Lobby({
   inviteTo: string | null;
 }) {
   useMascotPose("chipCount", "racking up the chips — pick a table");
+  const online = connectionState === "online";
   return (
     <div
       style={{
@@ -275,40 +296,45 @@ function Lobby({
     >
       <div
         style={{
-          maxWidth: 980,
+          maxWidth: 720,
           margin: "0 auto",
           display: "flex",
           flexDirection: "column",
-          gap: 22,
+          gap: 18,
         }}
       >
         <LobbyHeader />
+        {/* Status sits above all action cards — when offline this replaces
+            the inline error and shows actionable next steps. */}
+        <ServerStatusCard
+          state={connectionState}
+          errorMessage={error}
+          onRetry={onRetryConnection}
+        />
+        <QuickMatchCard onFindMatch={onFindMatch} disabled={!online} />
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) 320px",
-            gap: 22,
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            gap: 14,
             alignItems: "start",
           }}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            <QuickMatchCard onFindMatch={onFindMatch} />
-            <InviteLinkCard
-              invite={invite}
-              onCreate={onCreateInvite}
-              onCancel={onCancelInvite}
-            />
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <FriendsCard
-              myId={myId}
-              invite={invite}
-              inviteTo={inviteTo}
-              onChallengeFriend={onChallengeFriend}
-            />
-          </div>
+          <InviteLinkCard
+            invite={invite}
+            onCreate={onCreateInvite}
+            onCancel={onCancelInvite}
+            disabled={!online}
+          />
+          <FriendsCard
+            myId={myId}
+            invite={invite}
+            inviteTo={inviteTo}
+            onChallengeFriend={onChallengeFriend}
+            disabled={!online}
+          />
         </div>
-        {error && (
+        {error && online && (
           <div
             className="panel"
             style={{
@@ -366,7 +392,13 @@ function LobbyHeader() {
   );
 }
 
-function QuickMatchCard({ onFindMatch }: { onFindMatch: () => void }) {
+function QuickMatchCard({
+  onFindMatch,
+  disabled,
+}: {
+  onFindMatch: () => void;
+  disabled?: boolean;
+}) {
   return (
     <div
       className="panel panel-gold"
@@ -394,7 +426,14 @@ function QuickMatchCard({ onFindMatch }: { onFindMatch: () => void }) {
       <button
         className="btn btn-gold sparkle"
         onClick={onFindMatch}
-        style={{ fontSize: 16, padding: "14px 26px" }}
+        disabled={disabled}
+        title={disabled ? "server offline — try again in a moment" : undefined}
+        style={{
+          fontSize: 16,
+          padding: "14px 26px",
+          opacity: disabled ? 0.55 : 1,
+          cursor: disabled ? "not-allowed" : "pointer",
+        }}
       >
         ▸ find match
       </button>
@@ -406,10 +445,12 @@ function InviteLinkCard({
   invite,
   onCreate,
   onCancel,
+  disabled,
 }: {
   invite: InviteState;
   onCreate: () => void;
   onCancel: () => void;
+  disabled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -472,7 +513,15 @@ function InviteLinkCard({
           <button
             className="btn btn-red"
             onClick={onCreate}
-            style={{ fontSize: 14, padding: "12px 18px", minWidth: 150 }}
+            disabled={disabled}
+            title={disabled ? "server offline" : undefined}
+            style={{
+              fontSize: 14,
+              padding: "12px 18px",
+              minWidth: 150,
+              opacity: disabled ? 0.55 : 1,
+              cursor: disabled ? "not-allowed" : "pointer",
+            }}
           >
             ▸ create link
           </button>
@@ -546,11 +595,13 @@ function FriendsCard({
   invite,
   inviteTo,
   onChallengeFriend,
+  disabled,
 }: {
   myId: string;
   invite: InviteState;
   inviteTo: string | null;
   onChallengeFriend: (userId: string) => void;
+  disabled?: boolean;
 }) {
   const [friends, setFriends] = useState<FriendListEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -649,22 +700,29 @@ function FriendsCard({
           <div
             className="mono"
             style={{
-              padding: 12,
+              padding: 14,
               background: "rgba(0,0,0,0.25)",
               border: "1px dashed var(--line-soft)",
               borderRadius: 6,
               fontSize: 11,
               color: "var(--ink-mute)",
               textAlign: "center",
+              lineHeight: 1.6,
             }}
           >
-            no friends yet —{" "}
-            <Link
-              href="/friends"
-              style={{ color: "var(--gold)", textDecoration: "underline" }}
-            >
-              add one
-            </Link>
+            <div>
+              no friends yet —{" "}
+              <Link
+                href="/friends"
+                style={{ color: "var(--gold)", textDecoration: "underline" }}
+              >
+                add one
+              </Link>
+            </div>
+            <div style={{ marginTop: 4, fontSize: 10 }}>
+              or just hit{" "}
+              <span style={{ color: "var(--gold-glow)" }}>find match</span> above.
+            </div>
           </div>
         ) : (
           friends.map((f) => (
@@ -672,6 +730,7 @@ function FriendsCard({
               key={f.user_id}
               friend={f}
               inviteUrl={invite.targetUserId === f.user_id ? invite.url : null}
+              disabled={disabled}
               onChallenge={() => {
                 capture("match_friend_challenge_started", {
                   source: "friends_card",
@@ -691,10 +750,12 @@ function FriendInviteRow({
   friend,
   inviteUrl,
   onChallenge,
+  disabled,
 }: {
   friend: FriendListEntry;
   inviteUrl: string | null;
   onChallenge: () => void;
+  disabled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -754,11 +815,14 @@ function FriendInviteRow({
       <button
         className="mono upper"
         title={
-          inviteUrl
-            ? "Your friend is not connected right now. Send them this private invite link."
-            : "Challenge this friend directly if they are connected."
+          disabled
+            ? "server offline"
+            : inviteUrl
+              ? "Your friend is not connected right now. Send them this private invite link."
+              : "Challenge this friend directly if they are connected."
         }
         onClick={inviteUrl ? copyInvite : onChallenge}
+        disabled={disabled && !inviteUrl}
         style={{
           fontSize: 9,
           letterSpacing: "0.16em",
@@ -767,9 +831,10 @@ function FriendInviteRow({
           border: "1px solid var(--line-soft)",
           borderRadius: 5,
           padding: "6px 8px",
-          cursor: "pointer",
+          cursor: disabled && !inviteUrl ? "not-allowed" : "pointer",
           fontWeight: 800,
           whiteSpace: "nowrap",
+          opacity: disabled && !inviteUrl ? 0.55 : 1,
         }}
       >
         {inviteUrl ? (copied ? "copied" : "copy link") : "challenge"}

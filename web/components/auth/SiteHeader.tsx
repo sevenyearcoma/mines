@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useAuth } from "./AuthProvider";
 import { UserMenu } from "./UserMenu";
+import { ProToggle } from "@/components/pro/ProToggle";
 
 export function SiteHeader() {
   const { user, isGuest, loading } = useAuth();
@@ -47,7 +48,8 @@ export function SiteHeader() {
           {user && <NavLink href="/friends">friends</NavLink>}
         </nav>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <ProToggle size="sm" label="Pro" />
         {!loading && !user && !isGuest && (
           <Link
             href="/auth/sign-in"

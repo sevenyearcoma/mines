@@ -20,7 +20,7 @@ import { getMatch, getPlayer, removeMatch, setMatch } from "./registry.js";
 
 const ROUND_TIME_MS = 120_000;       // 2 minutes per round (matches CLAUDE.md)
 const ROUND_GRACE_MS = 250;          // server-side grace beyond client timer
-const BETWEEN_ROUNDS_MS = 1500;      // pause between rounds for overlays
+const BETWEEN_ROUNDS_MS = 5000;      // pause between rounds for overlays — long enough to digest scores
 const MATCH_ROUNDS = 5;
 const ROUND_WINS_NEEDED = 3;
 const MATCH_LIVES = 2;

@@ -51,10 +51,10 @@
   --font-body:    "Inter", "Helvetica Neue", system-ui, sans-serif;
   --font-mono:    "JetBrains Mono", "SF Mono", Menlo, monospace;
 
-  /* shadows — chunky balatro / casino-table elevation */
-  --shadow-card:   0 3px 0 #000, 0 12px 26px rgba(0,0,0,.65), 0 4px 10px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05);
-  --shadow-deep:   0 5px 0 #000, 0 22px 48px rgba(0,0,0,.72), 0 6px 14px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
-  --shadow-lift:   0 6px 18px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.4);
+  /* shadows — lightened: 2 layers max, theme preserved */
+  --shadow-card:   0 2px 0 #000, 0 8px 18px rgba(0,0,0,.45);
+  --shadow-deep:   0 3px 0 #000, 0 14px 30px rgba(0,0,0,.55);
+  --shadow-lift:   0 6px 14px rgba(0,0,0,.4);
   --shadow-tile:   0 2px 0 var(--tile-edge-lo), 0 4px 0 rgba(0,0,0,.55);
   --shadow-press:  inset 0 2px 0 rgba(0,0,0,.45), inset 0 -1px 0 rgba(255,255,255,.04);
 
@@ -117,12 +117,12 @@ body {
   overflow-x: hidden;
 }
 
-/* grain overlay for body */
+/* subtle grain overlay for body (dialed back from .55 to .22) */
 body::before {
   content: "";
   position: fixed; inset: 0;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.42 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  opacity: .55;
+  opacity: .22;
   mix-blend-mode: overlay;
   pointer-events: none;
   z-index: 1;
@@ -184,27 +184,24 @@ body::before {
   background: linear-gradient(180deg, var(--panel-2), var(--panel));
   color: var(--ink);
   cursor: pointer;
+  /* Lightened: keep the chunky "press-down" depth ridge + one ambient layer. */
   box-shadow:
-    0 3px 0 #000,
-    0 8px 18px rgba(0,0,0,.55),
-    0 2px 4px rgba(0,0,0,.4),
-    inset 0 1px 0 rgba(255,255,255,.08);
+    0 2px 0 #000,
+    0 4px 10px rgba(0,0,0,.4);
   transition: transform .08s ease, box-shadow .08s ease, filter .15s ease;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   user-select: none;
 }
 .btn:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.08);
+  transform: translateY(-1px);
+  filter: brightness(1.06);
   box-shadow:
-    0 5px 0 #000,
-    0 12px 26px rgba(0,0,0,.65),
-    0 3px 6px rgba(0,0,0,.45),
-    inset 0 1px 0 rgba(255,255,255,.1);
+    0 3px 0 #000,
+    0 6px 14px rgba(0,0,0,.45);
 }
 .btn:active {
   transform: translateY(2px);
-  box-shadow: 0 0 0 #000, inset 0 2px 4px rgba(0,0,0,.5);
+  box-shadow: 0 0 0 #000, inset 0 2px 4px rgba(0,0,0,.45);
 }
 
 .btn-gold {
@@ -533,8 +530,12 @@ body::before {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: marquee-glint 4s linear infinite;
+  /* Glint only on hover — was infinite, now one sweep on intent. */
+  background-position: -100% 0;
   pointer-events: none;
+}
+.wordmark:hover::before {
+  animation: marquee-glint 1.2s ease-out 1;
 }
 
 /* ─── particles / fx ─────────────────────────────── */
@@ -569,7 +570,11 @@ body::before {
   content:""; position: absolute; inset: 0;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent);
   background-size: 200% 100%;
-  animation: marquee-glint 2s linear infinite;
+  background-position: -100% 0;
+  /* Glint only when an ancestor flips data-pulsing on (set briefly on streak ticks). */
+}
+[data-pulsing="true"] .streak-fill::after {
+  animation: marquee-glint 1.2s ease-out 1;
 }
 
 /* scroll */
@@ -653,16 +658,9 @@ body::before {
   position: absolute;
   inset: 0;
   background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.025) 0,
-      rgba(255, 255, 255, 0.025) 1px,
-      transparent 1px,
-      transparent 72px
-    ),
-    linear-gradient(135deg, rgba(95, 218, 218, 0.06), transparent 28%),
-    linear-gradient(315deg, rgba(214, 59, 59, 0.10), transparent 32%),
-    linear-gradient(180deg, rgba(227, 178, 72, 0.09), transparent 38%);
+    linear-gradient(135deg, rgba(95, 218, 218, 0.05), transparent 28%),
+    linear-gradient(315deg, rgba(214, 59, 59, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(227, 178, 72, 0.07), transparent 38%);
   pointer-events: none;
 }
 
@@ -741,10 +739,7 @@ body::before {
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.20));
-  box-shadow:
-    0 3px 0 #000,
-    0 8px 18px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: 0 2px 0 #000, 0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
 .home-stat span {
@@ -777,10 +772,9 @@ body::before {
     linear-gradient(180deg, rgba(255, 212, 114, 0.10), transparent 26%),
     linear-gradient(180deg, #151d20, #080d10);
   box-shadow:
-    0 7px 0 #000,
-    0 24px 48px rgba(0, 0, 0, 0.58),
-    inset 0 1px 0 rgba(255, 212, 114, 0.18),
-    inset 0 0 44px rgba(0, 0, 0, 0.52);
+    0 3px 0 #000,
+    0 12px 24px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 212, 114, 0.14);
 }
 
 .home-board-top,
@@ -950,6 +944,115 @@ body::before {
   opacity: 0.72;
 }
 
+/* Primary CTA — single dominant action, paired with a one-line hint. */
+.home-primary-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.home-start-button {
+  align-self: flex-start;
+  font-size: 20px;
+  padding: 16px 28px;
+  text-decoration: none;
+  letter-spacing: 0.02em;
+}
+
+.home-primary-hint {
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.04em;
+}
+
+/* Secondary modes — real clickable cards (border + arrow + hover lift). */
+.home-secondary-modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.home-secondary-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  text-decoration: none;
+  box-shadow: 0 2px 0 #000, 0 4px 10px rgba(0, 0, 0, 0.35);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.08s ease,
+    box-shadow 0.15s ease;
+}
+
+.home-secondary-link.tone-gold {
+  border-color: var(--gold-deep);
+}
+.home-secondary-link.tone-red {
+  border-color: var(--red-deep);
+}
+
+.home-secondary-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 0 #000, 0 8px 18px rgba(0, 0, 0, 0.45);
+}
+.home-secondary-link.tone-gold:hover {
+  background: linear-gradient(180deg, rgba(227, 178, 72, 0.14), var(--panel));
+}
+.home-secondary-link.tone-red:hover {
+  background: linear-gradient(180deg, rgba(214, 59, 59, 0.12), var(--panel));
+}
+.home-secondary-link.tone-neutral:hover {
+  border-color: var(--gold-deep);
+  background: linear-gradient(180deg, rgba(227, 178, 72, 0.08), var(--panel));
+}
+
+.home-secondary-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.home-secondary-label {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-style: italic;
+  font-size: 19px;
+  color: var(--ink);
+}
+.home-secondary-link.tone-gold .home-secondary-label {
+  color: var(--gold-glow);
+}
+.home-secondary-link.tone-red .home-secondary-label {
+  color: var(--red-glow);
+}
+
+.home-secondary-meta {
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.02em;
+}
+
+.home-secondary-arrow {
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--ink-mute);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.home-secondary-link:hover .home-secondary-arrow {
+  color: var(--gold-glow);
+  transform: translateX(4px);
+}
+
 .home-divider {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--line), transparent);
@@ -1012,17 +1115,54 @@ body::before {
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(35, 44, 53, 0.84), rgba(12, 17, 20, 0.88));
-  box-shadow:
-    0 4px 0 #000,
-    0 14px 30px rgba(0, 0, 0, 0.62),
-    0 4px 10px rgba(0, 0, 0, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: 0 2px 0 #000, 0 6px 14px rgba(0, 0, 0, 0.4);
 }
 
 .home-info-card p {
   margin: 10px 0 0;
   color: var(--ink-2);
   line-height: 1.45;
+}
+
+/* Rules row — informational text, not clickable. No card chrome, no hover,
+   no shadow. Just a chip + headline + body in a quiet horizontal row. */
+.home-rules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  padding: 6px 4px;
+  border-top: 1px solid var(--line-soft);
+  margin-top: 4px;
+}
+
+.home-rule {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 4px 4px;
+}
+
+.home-rule .chip {
+  align-self: flex-start;
+  pointer-events: none;
+}
+
+.home-rule-body h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-style: italic;
+  font-size: 18px;
+  color: var(--ink-2);
+  letter-spacing: -0.01em;
+}
+
+.home-rule-body p {
+  margin: 4px 0 0;
+  color: var(--ink-mute);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 @media (max-width: 1180px) {
@@ -1155,30 +1295,27 @@ body::before {
   position: relative;
 }
 
-/* upgrade gold button — bigger glow halo, sharper edge */
+/* gold button — lighter halo, sharper edge */
 .btn-gold {
   box-shadow:
     0 2px 0 #6b4810,
-    0 6px 16px rgba(227, 178, 72, 0.42),
-    0 0 28px rgba(255, 212, 114, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -2px 0 rgba(107, 72, 16, 0.55);
+    0 5px 14px rgba(227, 178, 72, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -2px 0 rgba(107, 72, 16, 0.5);
 }
 .btn-gold:hover {
   box-shadow:
     0 3px 0 #6b4810,
-    0 8px 22px rgba(227, 178, 72, 0.55),
-    0 0 36px rgba(255, 212, 114, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -2px 0 rgba(107, 72, 16, 0.55);
+    0 6px 16px rgba(227, 178, 72, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -2px 0 rgba(107, 72, 16, 0.5);
 }
 .btn-red:hover {
   box-shadow:
     0 3px 0 #5d1212,
-    0 8px 22px rgba(214, 59, 59, 0.55),
-    0 0 36px rgba(255, 106, 106, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 -2px 0 rgba(93, 18, 18, 0.55);
+    0 6px 16px rgba(214, 59, 59, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -2px 0 rgba(93, 18, 18, 0.5);
 }
 
 /* ─── mascot rail (decorative background figure) ──────── */

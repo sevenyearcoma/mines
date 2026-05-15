@@ -4,6 +4,7 @@ import { DemoPlayer } from "@/components/demo/DemoPlayer";
 import { MatchDemoPlayer } from "@/components/demo/MatchDemoPlayer";
 import { fetchDemo } from "@/lib/demo/fetch";
 import type { Demo, DemoKind, MatchDemo } from "@/lib/demo/types";
+import { ProRouteGate } from "@/components/pro/ProRouteGate";
 
 export const dynamic = "force-dynamic";
 
@@ -38,47 +39,53 @@ export default async function DemoPage({
   if (!demo) notFound();
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <div
-        style={{
-          padding: "18px 28px",
-          borderBottom: "1px solid var(--line-soft)",
-          display: "flex",
-          alignItems: "baseline",
-          gap: 14,
-        }}
-      >
+    <ProRouteGate
+      title="demo replays"
+      body="Scrub every move, see the AI coach mark patterns, and step through teachable moments — included with Pro."
+      backHref={backHref(demo)}
+    >
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
         <div
-          className="disp"
-          style={{ fontSize: 30, fontStyle: "italic", letterSpacing: "-0.02em" }}
-        >
-          Demo
-        </div>
-        <div
-          className="mono upper"
-          style={{ fontSize: 10, color: "var(--ink-mute)", letterSpacing: "0.3em" }}
-        >
-          {subtitle(demo)}
-        </div>
-        <div style={{ flex: 1 }} />
-        <Link
-          href={backHref(demo)}
-          className="mono upper"
           style={{
-            fontSize: 10,
-            letterSpacing: "0.22em",
-            color: "var(--ink-2)",
-            textDecoration: "none",
+            padding: "18px 28px",
+            borderBottom: "1px solid var(--line-soft)",
+            display: "flex",
+            alignItems: "baseline",
+            gap: 14,
           }}
         >
-          back
-        </Link>
+          <div
+            className="disp"
+            style={{ fontSize: 30, fontStyle: "italic", letterSpacing: "-0.02em" }}
+          >
+            Demo
+          </div>
+          <div
+            className="mono upper"
+            style={{ fontSize: 10, color: "var(--ink-mute)", letterSpacing: "0.3em" }}
+          >
+            {subtitle(demo)}
+          </div>
+          <div style={{ flex: 1 }} />
+          <Link
+            href={backHref(demo)}
+            className="mono upper"
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.22em",
+              color: "var(--ink-2)",
+              textDecoration: "none",
+            }}
+          >
+            back
+          </Link>
+        </div>
+        {isMatchDemo(demo) ? (
+          <MatchDemoPlayer demo={demo} />
+        ) : (
+          <DemoPlayer demo={demo} />
+        )}
       </div>
-      {isMatchDemo(demo) ? (
-        <MatchDemoPlayer demo={demo} />
-      ) : (
-        <DemoPlayer demo={demo} />
-      )}
-    </div>
+    </ProRouteGate>
   );
 }

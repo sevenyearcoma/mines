@@ -1,0 +1,120 @@
+# =============================================================================
+# Secrets & environment
+# =============================================================================
+# Keep these ignore rules committed so env files stay out of the repo.
+
+# Never commit any .env variant; they hold Supabase keys, JWT secrets, etc.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Common secret/credential filenames
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.keystore
+secrets.*
+credentials.*
+service-account*.json
+
+# =============================================================================
+# Dependencies
+# =============================================================================
+node_modules/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+jspm_packages/
+bower_components/
+
+# =============================================================================
+# Build output
+# =============================================================================
+# Next.js
+.next/
+out/
+
+# Generic
+dist/
+build/
+.turbo/
+.swc/
+.vercel/
+web/iloveimg-compressed.zip
+
+# =============================================================================
+# TypeScript / tooling caches
+# =============================================================================
+*.tsbuildinfo
+*setup-report.md
+next-env.d.ts
+.eslintcache
+.stylelintcache
+.parcel-cache/
+.cache/
+.tmp/
+
+# =============================================================================
+# Testing & coverage
+# =============================================================================
+coverage/
+.nyc_output/
+*.lcov
+
+# =============================================================================
+# Logs & runtime
+# =============================================================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# =============================================================================
+# Editor / IDE
+# =============================================================================
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+*~
+.history/
+
+# =============================================================================
+# Claude Code local settings (per-machine, may contain custom permissions)
+# =============================================================================
+.claude/
+
+# =============================================================================
+# OS noise
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =============================================================================
+# Supabase (root folder only; migrations and local state are excluded)
+# =============================================================================
+/supabase/
+.env.local

@@ -11,6 +11,7 @@ import { CoachTipStrip } from "./CoachTipStrip";
 import { DemoBoard } from "./DemoBoard";
 import { type MascotPose } from "@/components/mascot/MinosMascot";
 import { useMascotPose } from "@/components/mascot/MascotRail";
+import { useProMode } from "@/components/pro/ProProvider";
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4] as const;
 type Speed = (typeof SPEEDS)[number];
@@ -22,26 +23,31 @@ type StepMode = "action" | "pattern";
 
 export function DemoPlayer({ demo }: { demo: Demo }) {
   const total = useMemo(() => totalMs(demo), [demo]);
+  const { isPro } = useProMode();
 
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<Speed>(1);
   // Coach is ON by default; the user can flip it off. The preference is
   // persisted to localStorage so the next demo opens in their chosen mode.
-  const [coachOn, setCoachOn] = useState<boolean>(true);
+  // When Pro is disabled the coach is hard-off regardless of the stored value.
+  const [coachPref, setCoachPref] = useState<boolean>(true);
+  const coachOn = isPro && coachPref;
   const [hoverPatternId, setHoverPatternId] = useState<string | null>(null);
   // Step mode: "pattern" (default) jumps between teachable moments,
-  // "action" walks one input event at a time.
-  const [stepMode, setStepMode] = useState<StepMode>("pattern");
+  // "action" walks one input event at a time. Pattern stepping is a Pro
+  // feature — fall back to action stepping when Pro is off.
+  const [stepModePref, setStepModePref] = useState<StepMode>("pattern");
+  const stepMode: StepMode = isPro ? stepModePref : "action";
 
   // Read the persisted preference on mount. Stored value `"0"` means off,
   // anything else (including null = no preference) means default ON.
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(COACH_STORAGE_KEY);
-      if (stored === "0") setCoachOn(false);
+      if (stored === "0") setCoachPref(false);
       const sm = window.localStorage.getItem(STEP_MODE_KEY);
-      if (sm === "action") setStepMode("action");
+      if (sm === "action") setStepModePref("action");
     } catch {
       // storage disabled / quota — just stick with the default.
     }
@@ -50,18 +56,18 @@ export function DemoPlayer({ demo }: { demo: Demo }) {
   // Save on every flip.
   useEffect(() => {
     try {
-      window.localStorage.setItem(COACH_STORAGE_KEY, coachOn ? "1" : "0");
+      window.localStorage.setItem(COACH_STORAGE_KEY, coachPref ? "1" : "0");
     } catch {
       // ignore
     }
-  }, [coachOn]);
+  }, [coachPref]);
   useEffect(() => {
     try {
-      window.localStorage.setItem(STEP_MODE_KEY, stepMode);
+      window.localStorage.setItem(STEP_MODE_KEY, stepModePref);
     } catch {
       // ignore
     }
-  }, [stepMode]);
+  }, [stepModePref]);
 
   // rAF playback loop. We track wall-clock time at the start of the loop and
   // each frame compute the delta we should advance by (scaled by speed).
@@ -296,10 +302,10 @@ export function DemoPlayer({ demo }: { demo: Demo }) {
         if (i > 0) setSpeed(SPEEDS[i - 1]);
       } else if (e.code === "KeyC") {
         e.preventDefault();
-        setCoachOn((v) => !v);
+        setCoachPref((v) => !v);
       } else if (e.code === "KeyP") {
         e.preventDefault();
-        setStepMode((m) => (m === "pattern" ? "action" : "pattern"));
+        setStepModePref((m) => (m === "pattern" ? "action" : "pattern"));
       }
     };
     window.addEventListener("keydown", onKey);
@@ -344,10 +350,11 @@ export function DemoPlayer({ demo }: { demo: Demo }) {
         <Controls
           currentMs={currentMs}
           totalMs={total}
+          isPro={isPro}
           coachOn={coachOn}
-          onToggleCoach={() => setCoachOn((v) => !v)}
+          onToggleCoach={() => setCoachPref((v) => !v)}
           stepMode={stepMode}
-          onStepMode={setStepMode}
+          onStepMode={setStepModePref}
           milestoneCount={patternMilestones.length}
           milestonePos={milestonePosition(
             frame.actionIndex,
@@ -388,6 +395,7 @@ function Controls({
   speed,
   actionIndex,
   totalActions,
+  isPro,
   coachOn,
   onToggleCoach,
   stepMode,
@@ -406,6 +414,7 @@ function Controls({
   speed: Speed;
   actionIndex: number;
   totalActions: number;
+  isPro: boolean;
   coachOn: boolean;
   onToggleCoach: () => void;
   stepMode: StepMode;
@@ -480,7 +489,8 @@ function Controls({
           </button>
         </div>
 
-        {/* step-mode toggle: by-pattern (default) vs by-action */}
+        {/* step-mode toggle: by-pattern (default, Pro) vs by-action */}
+        {isPro && (
         <div
           style={{
             display: "flex",
@@ -532,6 +542,7 @@ function Controls({
             );
           })}
         </div>
+        )}
 
         <div
           style={{
@@ -569,27 +580,29 @@ function Controls({
           ))}
         </div>
 
-        <button
-          onClick={onToggleCoach}
-          className="mono upper"
-          title="Toggle pattern coach (C)"
-          style={{
-            fontSize: 10,
-            letterSpacing: "0.16em",
-            padding: "8px 12px",
-            background: coachOn
-              ? "linear-gradient(180deg, var(--gold-glow), var(--gold))"
-              : "rgba(0,0,0,0.4)",
-            color: coachOn ? "#2a1d04" : "var(--ink-2)",
-            border: "1px solid var(--line-soft)",
-            borderRadius: 6,
-            cursor: "pointer",
-            fontWeight: 700,
-            marginLeft: 4,
-          }}
-        >
-          {coachOn ? "● coach on" : "○ coach"}
-        </button>
+        {isPro && (
+          <button
+            onClick={onToggleCoach}
+            className="mono upper"
+            title="Toggle pattern coach (C)"
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.16em",
+              padding: "8px 12px",
+              background: coachOn
+                ? "linear-gradient(180deg, var(--gold-glow), var(--gold))"
+                : "rgba(0,0,0,0.4)",
+              color: coachOn ? "#2a1d04" : "var(--ink-2)",
+              border: "1px solid var(--line-soft)",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontWeight: 700,
+              marginLeft: 4,
+            }}
+          >
+            {coachOn ? "● coach on" : "○ coach"}
+          </button>
+        )}
 
         <div style={{ flex: 1 }} />
 

@@ -8,7 +8,10 @@ import { HudReadout } from "../primitives/HudReadout";
 import { Ornament } from "../primitives/Ornament";
 import type { SaveState } from "@/components/auth/GameRecorder";
 
-const AUTO_RESET_SECONDS = 3;
+// How long the win/boom overlay stays visible before auto-starting a fresh
+// board. Long enough to read the breakdown, short enough that an itchy
+// player can keep moving — Esc dismisses it instantly.
+const AUTO_RESET_SECONDS = 5;
 
 export function ResultOverlay({
   over,

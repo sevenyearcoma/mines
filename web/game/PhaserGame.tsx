@@ -12,7 +12,16 @@ export default function PhaserGame({
   initialRound?: RoundConfig;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const gameRef = useRef<{ destroy: (b: boolean) => void } | null>(null);
+  // We only call .scene and .destroy on the game from the cleanup path;
+  // a structural type keeps Phaser out of this file's static type surface.
+  const gameRef = useRef<{
+    destroy: (b: boolean) => void;
+    scene: {
+      scenes: Array<{ scene?: { key?: string } }>;
+      stop: (key: string) => unknown;
+      start: (key: string, data?: object) => unknown;
+    };
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,8 +56,24 @@ export default function PhaserGame({
 
     return () => {
       cancelled = true;
-      gameRef.current?.destroy(true);
+      const game = gameRef.current;
       gameRef.current = null;
+      if (game) {
+        // Stop active scenes first so each scene's SHUTDOWN event fires —
+        // that's where bridge listeners detach. Without this, a StrictMode
+        // double-mount can leave listeners pointing at a destroyed scene
+        // whose `this.tweens` / `this.add` are null, throwing the next time
+        // an event arrives.
+        try {
+          for (const scene of game.scene.scenes) {
+            const key = scene.scene?.key;
+            if (key) game.scene.stop(key);
+          }
+        } catch {
+          // Best effort — Phaser's scene plugin can already be torn down.
+        }
+        game.destroy(true);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

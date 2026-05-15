@@ -104,9 +104,9 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   create() {
-    // Transparent canvas — the mascot rail in the page background shows through
-    // empty space around the board.
-    this.cameras.main.setBackgroundColor("rgba(0,0,0,0)");
+    // Transparent canvas (set via `transparent: true` in PhaserGame's game
+    // config) lets the mascot rail behind show through the empty space
+    // around the board.
 
     this.gridContainer = this.add.container(0, 0);
     this.frame = this.add.graphics();

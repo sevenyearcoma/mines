@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { bridge, type BoardSnapshot, type GameStats } from "@/game/bridge";
 import { useMatchStore } from "@/lib/store/match";
 import type { RoundResult } from "@/lib/engine";
-import { disposeSocket, getSocket, type GameSocket } from "./socket";
+import {
+  disposeSocket,
+  getSocket,
+  reconnectSocket,
+  type ConnectionState,
+  type GameSocket,
+} from "./socket";
 import type { CellEvent, PlayerHandle, ScoreSnapshot } from "./protocol";
 
 function inviteUrl(token: string): string {
@@ -56,9 +62,11 @@ export interface UseMultiplayerMatch {
   spectating: ReturnType<typeof useMatchStore.getState>["spectating"];
   ownDeadSnapshot: ReturnType<typeof useMatchStore.getState>["ownDeadSnapshot"];
   errorMessage: string | null;
+  connectionState: ConnectionState;
   invite: InviteState;
   challenge: ChallengeState;
   findMatch: () => void;
+  retryConnection: () => void;
   leaveMatch: () => void;
   cancelSearch: () => void;
   createInvite: () => void;
@@ -87,6 +95,40 @@ export function useMultiplayerMatch(): UseMultiplayerMatch {
     incoming: null,
     outgoing: null,
   });
+  const [connectionState, setConnectionState] =
+    useState<ConnectionState>("connecting");
+
+  // Subscribe to the global connection lifecycle (emitted from socket.ts) so
+  // every lobby/UI element renders identically without prop-drilling. Also
+  // re-emits `queue:join` after a recovered drop so the server's queue slot
+  // (which may have been evicted) refills before a friend tries to pair.
+  const wasOfflineRef = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onConnection = (e: Event) => {
+      const detail = (e as CustomEvent<{ state: ConnectionState }>).detail;
+      if (!detail?.state) return;
+      setConnectionState(detail.state);
+
+      if (detail.state === "offline" || detail.state === "connecting") {
+        wasOfflineRef.current = true;
+        return;
+      }
+      // Just came back online after being offline.
+      if (detail.state === "online" && wasOfflineRef.current) {
+        wasOfflineRef.current = false;
+        const status = useMatchStore.getState().status;
+        const s = socketRef.current;
+        if (status === "searching" && s?.connected) {
+          // Server may have dropped us out of the queue during the disconnect.
+          // Tell it we're still looking.
+          s.emit("queue:join");
+        }
+      }
+    };
+    window.addEventListener("mines:connection", onConnection);
+    return () => window.removeEventListener("mines:connection", onConnection);
+  }, []);
 
   // Mount: connect socket, wire all listeners. Unmount: tear it all down.
   useEffect(() => {
@@ -285,6 +327,21 @@ export function useMultiplayerMatch(): UseMultiplayerMatch {
     withSocket((socket) => socket.emit("queue:join"));
   }, [withSocket]);
 
+  const retryConnection = useCallback(() => {
+    const store = useMatchStore.getState();
+    store.clearError();
+    void (async () => {
+      try {
+        const socket = await reconnectSocket();
+        socketRef.current = socket;
+      } catch (err) {
+        store.setError(
+          err instanceof Error ? err.message : "Server still unreachable",
+        );
+      }
+    })();
+  }, []);
+
   const cancelSearch = useCallback(() => {
     const s = socketRef.current;
     if (s) {
@@ -362,9 +419,11 @@ export function useMultiplayerMatch(): UseMultiplayerMatch {
     spectating,
     ownDeadSnapshot,
     errorMessage,
+    connectionState,
     invite,
     challenge,
     findMatch,
+    retryConnection,
     leaveMatch,
     cancelSearch,
     createInvite: createInviteCb,

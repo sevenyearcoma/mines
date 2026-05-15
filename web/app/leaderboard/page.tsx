@@ -400,13 +400,33 @@ function LeaderboardList({
       <div
         className="panel"
         style={{
-          padding: 18,
+          padding: 22,
           color: "var(--ink-mute)",
           fontSize: 13,
           textAlign: "center",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          alignItems: "center",
         }}
       >
-        {emptyHint}
+        <div>{emptyHint}</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link
+            href="/daily"
+            className="btn btn-gold sparkle"
+            style={{ fontSize: 12, padding: "8px 14px" }}
+          >
+            play the daily →
+          </Link>
+          <Link
+            href="/play"
+            className="btn btn-ghost"
+            style={{ fontSize: 12, padding: "8px 14px" }}
+          >
+            solo sprint →
+          </Link>
+        </div>
       </div>
     );
   }

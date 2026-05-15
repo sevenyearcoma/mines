@@ -25,8 +25,28 @@ type AuthContextValue = {
   displayName: string | null;
   loading: boolean;
   signInAsGuest: (name: string) => GuestIdentity;
+  // Picks a random adjective+noun name and creates a guest identity without
+  // bouncing through the sign-in form. Used by routes that allow guests so
+  // first-time visitors skip the "sit at the table" gate.
+  signInAsAutoGuest: () => GuestIdentity;
   signOut: () => Promise<void>;
 };
+
+const GUEST_ADJECTIVES = [
+  "lucky", "bold", "sly", "calm", "swift", "shady", "sharp", "quick",
+  "wild", "smooth", "lone", "high", "ace", "neon",
+];
+const GUEST_NOUNS = [
+  "dealer", "shark", "fox", "card", "chip", "queen", "king", "joker",
+  "spade", "heart", "club", "diamond", "tower", "bandit",
+];
+
+function randomGuestName(): string {
+  const adj = GUEST_ADJECTIVES[Math.floor(Math.random() * GUEST_ADJECTIVES.length)];
+  const noun = GUEST_NOUNS[Math.floor(Math.random() * GUEST_NOUNS.length)];
+  const tag = Math.floor(Math.random() * 90) + 10; // 10..99
+  return `${adj}-${noun}-${tag}`;
+}
 
 const GUEST_KEY = "mines.guest";
 
@@ -161,6 +181,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return next;
   }, []);
 
+  const signInAsAutoGuest = useCallback((): GuestIdentity => {
+    const next: GuestIdentity = { id: newGuestId(), name: randomGuestName() };
+    writeGuest(next);
+    setGuest(next);
+    capture("guest_signed_in", { name: next.name, auto: true });
+    return next;
+  }, []);
+
   const signOut = useCallback(async () => {
     clearGuest();
     setGuest(null);
@@ -185,9 +213,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       displayName,
       loading,
       signInAsGuest,
+      signInAsAutoGuest,
       signOut,
     }),
-    [session, user, profile, guest, isGuest, displayName, loading, signInAsGuest, signOut],
+    [session, user, profile, guest, isGuest, displayName, loading, signInAsGuest, signInAsAutoGuest, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

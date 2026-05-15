@@ -5,6 +5,7 @@ import { useState } from "react";
 import { fmtTime } from "@/lib/format";
 import { flagEmoji } from "@/lib/leaderboard/country";
 import type { Game } from "@/lib/types/db";
+import { useProMode } from "@/components/pro/ProProvider";
 
 function fmtMs(ms: number | null | undefined): string {
   if (ms == null) return "—";
@@ -126,6 +127,7 @@ function TabButton({
 }
 
 function MatchesList({ matches }: { matches: RecentMatchRow[] }) {
+  const { isPro } = useProMode();
   if (matches.length === 0) {
     return <EmptyState label="no 1v1 demos saved yet." />;
   }
@@ -219,30 +221,50 @@ function MatchesList({ matches }: { matches: RecentMatchRow[] }) {
             >
               {new Date(match.playedAt).toLocaleDateString()}
             </span>
-            {match.rounds.map((round) => (
-              <Link
-                key={round.id}
-                href={`/demo/match/${round.id}`}
-                className="mono upper"
-                title={`round ${round.round_index + 1}`}
-                style={{
-                  fontSize: 9,
-                  letterSpacing: "0.14em",
-                  color: round.draw
-                    ? "var(--ink-2)"
-                    : round.won
-                      ? "var(--gold)"
-                      : "var(--red-glow)",
-                  textDecoration: "none",
-                  padding: "4px 7px",
-                  border: "1px solid var(--line-soft)",
-                  borderRadius: 4,
-                  background: "rgba(0,0,0,0.2)",
-                }}
-              >
-                r{round.round_index + 1}
-              </Link>
-            ))}
+            {match.rounds.map((round) =>
+              isPro ? (
+                <Link
+                  key={round.id}
+                  href={`/demo/match/${round.id}`}
+                  className="mono upper"
+                  title={`round ${round.round_index + 1}`}
+                  style={{
+                    fontSize: 9,
+                    letterSpacing: "0.14em",
+                    color: round.draw
+                      ? "var(--ink-2)"
+                      : round.won
+                        ? "var(--gold)"
+                        : "var(--red-glow)",
+                    textDecoration: "none",
+                    padding: "4px 7px",
+                    border: "1px solid var(--line-soft)",
+                    borderRadius: 4,
+                    background: "rgba(0,0,0,0.2)",
+                  }}
+                >
+                  r{round.round_index + 1}
+                </Link>
+              ) : (
+                <span
+                  key={round.id}
+                  className="mono upper"
+                  title="Pro: demo replays"
+                  style={{
+                    fontSize: 9,
+                    letterSpacing: "0.14em",
+                    color: "var(--ink-mute)",
+                    padding: "4px 7px",
+                    border: "1px dashed var(--line-soft)",
+                    borderRadius: 4,
+                    background: "rgba(0,0,0,0.2)",
+                    opacity: 0.55,
+                  }}
+                >
+                  r{round.round_index + 1} 🔒
+                </span>
+              ),
+            )}
           </div>
         </div>
       ))}
@@ -251,6 +273,7 @@ function MatchesList({ matches }: { matches: RecentMatchRow[] }) {
 }
 
 function SoloList({ games }: { games: Game[] }) {
+  const { isPro } = useProMode();
   if (games.length === 0) {
     return <EmptyState label="no games yet — play one and come back." />;
   }
@@ -303,21 +326,39 @@ function SoloList({ games }: { games: Game[] }) {
               {new Date(g.played_at).toLocaleDateString()}
             </span>
             {hasDemo ? (
-              <Link
-                href={`/demo/solo/${g.id}`}
-                className="mono upper"
-                style={{
-                  fontSize: 10,
-                  letterSpacing: "0.18em",
-                  color: "var(--gold)",
-                  textDecoration: "none",
-                  padding: "4px 8px",
-                  border: "1px solid var(--gold-deep)",
-                  borderRadius: 4,
-                }}
-              >
-                ▶ demo
-              </Link>
+              isPro ? (
+                <Link
+                  href={`/demo/solo/${g.id}`}
+                  className="mono upper"
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: "0.18em",
+                    color: "var(--gold)",
+                    textDecoration: "none",
+                    padding: "4px 8px",
+                    border: "1px solid var(--gold-deep)",
+                    borderRadius: 4,
+                  }}
+                >
+                  ▶ demo
+                </Link>
+              ) : (
+                <span
+                  className="mono upper"
+                  title="Pro: demo replays"
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: "0.18em",
+                    color: "var(--ink-mute)",
+                    padding: "4px 8px",
+                    border: "1px dashed var(--line-soft)",
+                    borderRadius: 4,
+                    opacity: 0.6,
+                  }}
+                >
+                  🔒 pro
+                </span>
+              )
             ) : (
               <span
                 className="mono upper"
@@ -348,9 +389,20 @@ function EmptyState({ label }: { label: string }) {
         fontFamily: "var(--font-mono)",
         fontSize: 12,
         letterSpacing: "0.04em",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        alignItems: "center",
       }}
     >
-      {label}
+      <div>{label}</div>
+      <Link
+        href="/play"
+        className="btn btn-ghost"
+        style={{ fontSize: 12, padding: "8px 14px" }}
+      >
+        start playing →
+      </Link>
     </div>
   );
 }

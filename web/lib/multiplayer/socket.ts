@@ -11,8 +11,21 @@ export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 const SOCKET_URL =
   process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:3001";
-const CONNECT_TIMEOUT_MS = 8000;
+// 12s tolerates Railway free-tier cold starts; local dev rarely hits it.
+const CONNECT_TIMEOUT_MS = 12000;
 const GUEST_KEY = "mines.guest";
+
+// Browser-side broadcast channel for connection lifecycle. Components anywhere
+// in the tree can `window.addEventListener("mines:connection", ...)` to react
+// to "connecting" | "online" | "offline" transitions without coupling to
+// useMultiplayerMatch.
+export type ConnectionState = "connecting" | "online" | "offline";
+function emitConnectionState(state: ConnectionState, detail?: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("mines:connection", { detail: { state, message: detail } }),
+  );
+}
 
 type ReadyGameSocket = GameSocket & {
   __minesReady?: boolean;
@@ -69,6 +82,7 @@ export async function getSocket(): Promise<GameSocket> {
       throw new Error("Not signed in — cannot open multiplayer socket.");
     }
 
+    emitConnectionState("connecting");
     const socket = io(SOCKET_URL, {
       auth,
       autoConnect: false,
@@ -79,12 +93,24 @@ export async function getSocket(): Promise<GameSocket> {
       timeout: CONNECT_TIMEOUT_MS,
     }) as unknown as ReadyGameSocket;
 
+    // Surface reconnect lifecycle so the lobby card can show "connecting…" between drops.
+    socket.io.on("reconnect_attempt", () => emitConnectionState("connecting"));
+    socket.io.on("reconnect", () => emitConnectionState("online"));
+    socket.io.on("reconnect_failed", () =>
+      emitConnectionState("offline", "Server unreachable"),
+    );
+
     current = socket;
     try {
       await waitForReady(socket);
+      emitConnectionState("online");
     } catch (err) {
       socket.disconnect();
       current = null;
+      emitConnectionState(
+        "offline",
+        err instanceof Error ? err.message : "Server unreachable",
+      );
       throw err;
     }
     return socket;
@@ -146,4 +172,15 @@ export function disposeSocket(): void {
     current = null;
   }
   pending = null;
+  emitConnectionState("offline");
+}
+
+/**
+ * Force a fresh socket attempt. Used by the lobby "Retry" button when the
+ * server was offline at first try. Disposes any stale socket, then opens a new
+ * one; resolves to the connected socket or rejects on failure.
+ */
+export async function reconnectSocket(): Promise<GameSocket> {
+  disposeSocket();
+  return getSocket();
 }

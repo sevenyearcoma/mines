@@ -48,7 +48,9 @@ interface PendingChallenge {
 const challenges = new Map<string, PendingChallenge>();
 const challengeByUser = new Map<string, Set<string>>();
 
-const PORT = Number(process.env.SOCKET_PORT ?? 3001);
+// Railway and most container hosts inject `PORT`; honour it first, then our
+// own `SOCKET_PORT`, then 3001 for local dev.
+const PORT = Number(process.env.PORT ?? process.env.SOCKET_PORT ?? 3001);
 const CORS_ORIGINS = corsOrigins(process.env.CORS_ORIGIN);
 
 const httpServer = createServer();
@@ -450,13 +452,22 @@ io.on("connection", async (rawSocket) => {
     // "replaced" disconnect has already had its slot taken over.
     const current = getPlayer(handle.id);
     if (current && current.socket.id === socket.id) {
-      leaveQueue(handle.id);
-      current.inQueue = false;
-      if (player.matchId) {
+      // Players in an active match get a grace window so they can reconnect
+      // without forfeiting. Players in matchmaking get the SAME grace window
+      // so a quick reload during search doesn't drop their queue slot —
+      // otherwise a friend joining queue 10 seconds later finds an empty
+      // queue and never pairs.
+      const wasInQueue = current.inQueue;
+      const inMatch = player.matchId !== null;
+
+      if (inMatch || wasInQueue) {
         if (current.disconnectTimer) clearTimeout(current.disconnectTimer);
         current.disconnectTimer = setTimeout(() => {
           const latest = getPlayer(handle.id);
           if (!latest || latest.socket.id !== socket.id) return;
+          // Grace expired — really gone now.
+          leaveQueue(handle.id);
+          latest.inQueue = false;
           removePlayer(handle.id);
           cancelInviteByUser(handle.id);
           clearChallengesByUser(
@@ -464,12 +475,18 @@ io.on("connection", async (rawSocket) => {
             "unavailable",
             `${handle.name} disconnected.`,
           );
-          const match = getMatch(player.matchId!);
-          player.matchId = null;
-          if (match) handleForfeit(match, handle.id);
+          if (inMatch) {
+            const match = getMatch(player.matchId!);
+            player.matchId = null;
+            if (match) handleForfeit(match, handle.id);
+          }
         }, DISCONNECT_GRACE_MS);
         return;
       }
+
+      // Not queued, not in match — clean up immediately.
+      leaveQueue(handle.id);
+      current.inQueue = false;
       removePlayer(handle.id);
       cancelInviteByUser(handle.id);
       clearChallengesByUser(
