@@ -1,5 +1,6 @@
 "use client";
 
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { DIFFS, type Difficulty } from "@/lib/engine";
 import { bridge, type GameStats } from "@/game/bridge";
 import { fmtTime, pad } from "@/lib/format";
@@ -91,6 +92,15 @@ const TOUCH_PROPS = {
   },
 };
 
+function touchActivate(
+  event: ReactPointerEvent<HTMLButtonElement>,
+  action: () => void,
+) {
+  if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+  event.preventDefault();
+  action();
+}
+
 function DifficultyTabs({ activeDifficulty }: { activeDifficulty: Difficulty }) {
   return (
     <div
@@ -106,11 +116,13 @@ function DifficultyTabs({ activeDifficulty }: { activeDifficulty: Difficulty }) 
     >
       {(Object.keys(DIFFS) as Difficulty[]).map((k) => {
         const active = activeDifficulty === k;
+        const requestDifficulty = () => bridge.emit("solo:difficultyRequested", k);
         return (
           <button
             key={k}
             {...TOUCH_PROPS}
-            onClick={() => bridge.emit("solo:difficultyRequested", k)}
+            onClick={requestDifficulty}
+            onPointerUp={(event) => touchActivate(event, requestDifficulty)}
             className="mono upper play-difficulty-btn"
             aria-pressed={active}
             style={{
@@ -138,11 +150,13 @@ function DifficultyTabs({ activeDifficulty }: { activeDifficulty: Difficulty }) 
 }
 
 function NewBoardButton() {
+  const reset = () => bridge.emit("cmd:reset");
   return (
     <button
       {...TOUCH_PROPS}
       className="btn btn-ghost play-new-button"
-      onClick={() => bridge.emit("cmd:reset")}
+      onClick={reset}
+      onPointerUp={(event) => touchActivate(event, reset)}
       style={{ ...TOUCH_PROPS.style, padding: "10px 14px", fontSize: 14 }}
     >
       ↻ new

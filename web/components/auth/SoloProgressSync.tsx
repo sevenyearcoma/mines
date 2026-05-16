@@ -51,6 +51,18 @@ export function SoloProgressSync() {
     await enqueueWrite(() => saveSoloProgress(owner, snapshot));
   }, [enqueueWrite]);
 
+  const queuePendingSave = useCallback(() => {
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const snapshot = pendingSnapshotRef.current;
+    pendingSnapshotRef.current = null;
+    if (!snapshot) return;
+    const owner = ownerRef.current;
+    void enqueueWrite(() => saveSoloProgress(owner, snapshot));
+  }, [enqueueWrite]);
+
   useEffect(() => {
     const onSnapshot = (snapshot: SoloProgressSnapshot) => {
       pendingSnapshotRef.current = snapshot;
@@ -73,7 +85,7 @@ export function SoloProgressSync() {
 
     const onDifficulty = async (difficulty: Difficulty) => {
       const seq = ++requestSeqRef.current;
-      await flushSave();
+      queuePendingSave();
       const saved = await loadSoloProgress(ownerRef.current, difficulty);
       if (seq !== requestSeqRef.current) return;
       if (saved) bridge.emit("cmd:loadProgress", saved);
@@ -103,7 +115,7 @@ export function SoloProgressSync() {
         window.clearTimeout(saveTimerRef.current);
       }
     };
-  }, [flushSave]);
+  }, [enqueueWrite, flushSave, queuePendingSave]);
 
   return null;
 }
